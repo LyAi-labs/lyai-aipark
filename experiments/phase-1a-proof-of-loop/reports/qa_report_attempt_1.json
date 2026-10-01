@@ -1,0 +1,58 @@
+{
+  "status": "FAIL",
+  "attempt": 1,
+  "artifact": "renders/v1_fail.mp4",
+  "failedChecks": [
+    "AUDIO_DURATION_MISMATCH",
+    "AV_DRIFT_EXCEEDS_TOLERANCE"
+  ],
+  "diagnosticSignals": [
+    "Expected audio duration 3.0s, observed 4.2240s (diff: +1.2240s)",
+    "AV drift of 1.2240s (36.72 frames) exceeds tolerance of 0.033s / 1.0 frame(s)."
+  ],
+  "facts": {
+    "fileSizeBytes": 93805,
+    "videoStreamExists": true,
+    "videoCodec": "h264",
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "frameCount": 90,
+    "videoDurationSeconds": 3.0,
+    "audioStreamExists": true,
+    "audioCodec": "aac",
+    "audioDurationSeconds": 4.224,
+    "driftSeconds": 1.224,
+    "driftFrames": 36.72,
+    "containerDurationSeconds": 4.224
+  },
+  "expected": {
+    "videoStreamExists": true,
+    "videoCodec": "h264",
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "frameCount": 90,
+    "videoDurationSeconds": 3.0,
+    "audioStreamExists": true,
+    "audioCodec": "aac",
+    "audioDurationSeconds": 3.0,
+    "maxAllowedDriftSeconds": 0.033,
+    "maxAllowedDriftFrames": 1.0
+  },
+  "actual": {
+    "videoStreamExists": true,
+    "videoCodec": "h264",
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "frameCount": 90,
+    "videoDurationSeconds": 3.0,
+    "audioStreamExists": true,
+    "audioCodec": "aac",
+    "audioDurationSeconds": 4.224,
+    "driftSeconds": 1.224,
+    "driftFrames": 36.72
+  },
+  "exitCode": 1
+}

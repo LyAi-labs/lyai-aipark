@@ -1,11 +1,31 @@
 {
-  "currentStage": "INITIALIZED",
-  "attempt": 0,
+  "currentStage": "EXPERIMENT_COMPLETED",
+  "attempt": 2,
   "maxAttempts": 3,
-  "lastAction": "EXPERIMENT_SETUP",
-  "lastResult": "SUCCESS",
+  "lastAction": "QA_VERIFY",
+  "lastResult": "PASS",
   "lastError": null,
-  "errorHash": null,
-  "currentArtifact": null,
-  "history": []
+  "errorHash": "004c9d0c6b4e",
+  "currentArtifact": "renders/v2_pass.mp4",
+  "history": [
+    {
+      "attempt": 1,
+      "artifact": "renders/v1_fail.mp4",
+      "status": "FAIL",
+      "failedChecks": [
+        "AUDIO_DURATION_MISMATCH",
+        "AV_DRIFT_EXCEEDS_TOLERANCE"
+      ],
+      "errorHash": "004c9d0c6b4e",
+      "proposedAction": "Execute patch_audio.py to adapt assets/audio_raw_4.2s.aac to contractual duration 3.0s (generating assets/audio_adapted_3.0s.aac) and re-render without altering spec.json."
+    },
+    {
+      "attempt": 2,
+      "artifact": "renders/v2_pass.mp4",
+      "status": "PASS",
+      "failedChecks": [],
+      "errorHash": null,
+      "proposedAction": null
+    }
+  ]
 }

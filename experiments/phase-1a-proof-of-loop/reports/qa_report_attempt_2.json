@@ -1,0 +1,52 @@
+{
+  "status": "PASS",
+  "attempt": 2,
+  "artifact": "renders/v2_pass.mp4",
+  "failedChecks": [],
+  "diagnosticSignals": [],
+  "facts": {
+    "fileSizeBytes": 74142,
+    "videoStreamExists": true,
+    "videoCodec": "h264",
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "frameCount": 90,
+    "videoDurationSeconds": 3.0,
+    "audioStreamExists": true,
+    "audioCodec": "aac",
+    "audioDurationSeconds": 3.029,
+    "driftSeconds": 0.029,
+    "driftFrames": 0.87,
+    "containerDurationSeconds": 3.029
+  },
+  "expected": {
+    "videoStreamExists": true,
+    "videoCodec": "h264",
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "frameCount": 90,
+    "videoDurationSeconds": 3.0,
+    "audioStreamExists": true,
+    "audioCodec": "aac",
+    "audioDurationSeconds": 3.0,
+    "maxAllowedDriftSeconds": 0.033,
+    "maxAllowedDriftFrames": 1.0
+  },
+  "actual": {
+    "videoStreamExists": true,
+    "videoCodec": "h264",
+    "width": 1280,
+    "height": 720,
+    "fps": 30.0,
+    "frameCount": 90,
+    "videoDurationSeconds": 3.0,
+    "audioStreamExists": true,
+    "audioCodec": "aac",
+    "audioDurationSeconds": 3.029,
+    "driftSeconds": 0.029,
+    "driftFrames": 0.87
+  },
+  "exitCode": 0
+}
