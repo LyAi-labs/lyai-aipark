@@ -1,0 +1,11 @@
+{
+  "currentStage": "INITIALIZED",
+  "attempt": 0,
+  "maxAttempts": 3,
+  "lastAction": "EXPERIMENT_SETUP",
+  "lastResult": "SUCCESS",
+  "lastError": null,
+  "errorHash": null,
+  "currentArtifact": null,
+  "history": []
+}

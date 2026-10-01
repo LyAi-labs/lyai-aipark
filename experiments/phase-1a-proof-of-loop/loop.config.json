@@ -1,0 +1,17 @@
+{
+  "experimentId": "phase-1a-proof-of-loop",
+  "specPath": "spec.json",
+  "specSha256": "b228c4f76dc4abfd03116f8fe0b4433bf8b7888dfdd7de1131ec79b5f2a41c81",
+  "maxAttempts": 3,
+  "paths": {
+    "assetsDir": "assets",
+    "rendersDir": "renders",
+    "reportsDir": "reports",
+    "statePath": "state/pipeline.state.json",
+    "eventsPath": "logs/events.jsonl"
+  },
+  "loopDetection": {
+    "maxConsecutiveIdenticalErrors": 2,
+    "maxOscillationDepth": 3
+  }
+}
