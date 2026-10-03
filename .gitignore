@@ -12,3 +12,8 @@ $RECYCLE.BIN/
 
 # Temporary scratch files
 *.tmp
+
+# Secrets and virtual environments
+.env
+venv/
+

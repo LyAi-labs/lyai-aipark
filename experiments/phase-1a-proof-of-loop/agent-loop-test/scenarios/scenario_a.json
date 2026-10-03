@@ -1,0 +1,13 @@
+{
+  "system": {
+    "audio_duration_seconds": 4.2,
+    "video_duration_seconds": 3.0,
+    "fps": 30
+  },
+  "target": {
+    "target_duration_seconds": 3.0,
+    "max_duration_drift_seconds": 0.05
+  },
+  "status": "FAIL",
+  "iteration": 0
+}
