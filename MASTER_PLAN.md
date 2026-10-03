@@ -590,12 +590,21 @@ Durante la Phase 00 se detectó lógica de negocio crítica que actualmente resi
   * [x] Idempotencia y reanudabilidad de `JobStep` garantizada por `input_hash: VARCHAR(64)`.
   * [x] Rediseño de control de calidad: aprobación basada en 0 fallos críticos en `QCCheck` y exclusión de engagement.
   * [x] `ProviderExecution` con `cost_eur` nullable y separación de telemetría de contabilidad.
-* **[ ] PHASE 02 — POSTGRESQL & PERSISTENCE ENGINE (PENDIENTE DE REVISIÓN Y APROBACIÓN)**
+* **[x] PHASE 02 — POSTGRESQL & PERSISTENCE ENGINE (COMPLETADA)**
+  * [x] Instalación de `prisma@6.4.1` y `@prisma/client@6.4.1` con integración en scripts de `package.json`.
+  * [x] Modelado e implementación del esquema canónico definitivo de 20 tablas físicas en [prisma/schema.prisma](file:///c:/Users/Glado/CartoonFactory/prisma/schema.prisma).
+  * [x] Validación sintáctica y referencial exitosa (`prisma validate` OK).
+  * [x] Generación del cliente Prisma fuertemente tipado (`prisma generate` OK).
+  * [x] Cliente singleton con logging estructurado y protección SSR en [src/server/db/client.ts](file:///c:/Users/Glado/CartoonFactory/src/server/db/client.ts).
+  * [x] Definición de servicio PostgreSQL 16 en [docker-compose.yml](file:///c:/Users/Glado/CartoonFactory/docker-compose.yml).
+  * [x] Script de seed con datos maestros en [prisma/seed.ts](file:///c:/Users/Glado/CartoonFactory/prisma/seed.ts).
+  * [x] Endpoint de salud y diagnóstico de base de datos en `GET /api/health/db`.
+* **[ ] PHASE 03 — SECURITY, AUTH & MULTI-TENANCY (PENDIENTE)**
 
 ---
 
 ## 12. REGLA DE CONTINUIDAD
 1. **Rama `main` intacta** en el baseline original de Google AI Studio (`1eae2f8`).
 2. **Desarrollo activo en `Try1`** con cimientos de arquitectura Server-First.
-3. Se esperará confirmación del usuario tras la revisión de Phase 01.2 antes de proceder con la implementación de **PHASE 02**.
+3. Se esperará confirmación del usuario tras la entrega de Phase 02 antes de proceder con **PHASE 03**.
 

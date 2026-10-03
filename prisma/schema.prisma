@@ -1,0 +1,650 @@
+// ==============================================================================
+// CARTOON STUDIO — CANONICAL RELATIONAL SCHEMA (PHASE 02)
+// Database Engine: PostgreSQL 16
+// ORM: Prisma 6.4.1
+// Architecture: Server-First, Highly Normalized (3NF), Invariant Enforced
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------------------------------
+
+enum EpisodeStatus {
+  DRAFT
+  READY_FOR_PRODUCTION
+  IN_PRODUCTION
+  READY_FOR_REVIEW
+  APPROVED
+  ARCHIVED
+}
+
+enum JobType {
+  SCRIPTING
+  STORYBOARDING
+  VOICE_GENERATION
+  ASSET_GENERATION
+  AUDIO_COMPOSITION
+  VIDEO_COMPOSITION
+  FFMPEG_RENDER
+  VALIDATION
+}
+
+enum JobStatus {
+  PENDING
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum StepStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  SKIPPED_REUSED
+  FAILED
+}
+
+enum AssetType {
+  IMAGE_SCENE
+  IMAGE_CHARACTER
+  AUDIO_VOICE
+  AUDIO_MUSIC
+  AUDIO_SFX
+  VIDEO_RENDER
+  SUBTITLE_SRT
+  SUBTITLE_VTT
+  THUMBNAIL
+}
+
+enum StorageDriver {
+  LOCAL
+  S3
+}
+
+enum ProviderType {
+  GEMINI
+  IMAGEN
+  GOOGLE_TTS
+  ELEVENLABS
+  YOUTUBE_DATA_API
+}
+
+enum QCCategory {
+  SAFETY_COMPLIANCE
+  CONTENT
+  CONTINUITY
+  AUDIO
+  VISUAL
+  TECHNICAL
+}
+
+enum QCSeverity {
+  CRITICAL
+  WARNING
+}
+
+enum QCCheckStatus {
+  PASS
+  WARNING
+  FAIL
+}
+
+enum EditorialStatus {
+  DRAFT_SCHEDULE
+  CONFIRMED
+  RESCHEDULED
+  BROADCASTED
+  CANCELLED
+}
+
+enum ChannelConnectionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  INSUFFICIENT_SCOPES
+}
+
+enum PrivacyStatus {
+  PRIVATE
+  UNLISTED
+  PUBLIC
+  SCHEDULED
+}
+
+// ------------------------------------------------------------------------------
+// 1. USERS & ACCESS
+// ------------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique @db.VarChar(255)
+  name      String   @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  series              Series[]
+  googleOAuthAccounts GoogleOAuthAccount[]
+
+  @@map("users")
+}
+
+// ------------------------------------------------------------------------------
+// 2. SERIES & MASTER FRANCHISE BIBLE
+// ------------------------------------------------------------------------------
+
+model Series {
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
+  name                 String   @db.VarChar(255)
+  description          String?  @db.Text
+  mainCharacterName    String   @map("main_character_name") @db.VarChar(100)
+  visualStyle          String   @map("visual_style") @db.VarChar(255)
+  targetAge            String   @map("target_age") @db.VarChar(50)
+  language             String   @default("Spanish") @db.VarChar(50)
+  episodeLengthDefault String?  @map("episode_length_default") @db.VarChar(50)
+  narrativeRules       Json     @default("[]") @map("narrative_rules")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  episodes             Episode[]
+  characterDefinitions CharacterDefinition[]
+
+  @@index([userId], name: "idx_series_user_id")
+  @@map("series")
+}
+
+// ------------------------------------------------------------------------------
+// 3. MASTER CHARACTER DEFINITION (FRANCHISE ARCHETYPE)
+// ------------------------------------------------------------------------------
+
+model CharacterDefinition {
+  id                      String   @id @default(uuid()) @db.Uuid
+  seriesId                String   @map("series_id") @db.Uuid
+  name                    String   @db.VarChar(100)
+  species                 String   @db.VarChar(100)
+  personality             String?  @db.Text
+  age                     String?  @db.VarChar(50)
+  colorPalette            Json     @default("[]") @map("color_palette")
+  clothing                String?  @db.Text
+  visualFeatures          String?  @map("visual_features") @db.Text
+  visualConsistencyPrompt String   @map("visual_consistency_prompt") @db.Text
+  masterPrompt            String   @map("master_prompt") @db.Text
+  tagline                 String?  @db.VarChar(255)
+  turnaroundNotes         String?  @map("turnaround_notes") @db.Text
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  series            Series                 @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  voiceProfile      CharacterVoiceProfile?
+  episodeCharacters EpisodeCharacter[]
+
+  @@index([seriesId], name: "idx_character_definitions_series_id")
+  @@map("character_definitions")
+}
+
+// ------------------------------------------------------------------------------
+// 4. CHARACTER VOICE PROFILE
+// ------------------------------------------------------------------------------
+
+model CharacterVoiceProfile {
+  id                    String   @id @default(uuid()) @db.Uuid
+  characterDefinitionId String   @unique @map("character_definition_id") @db.Uuid
+  provider              String   @default("google-cloud-tts") @db.VarChar(50)
+  voiceId               String   @map("voice_id") @db.VarChar(100)
+  pitch                 Decimal  @default(1.00) @db.Decimal(4, 2)
+  speed                 Decimal  @default(1.00) @db.Decimal(4, 2)
+  timbre                String?  @db.VarChar(100)
+  language              String   @default("es-ES") @db.VarChar(50)
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  characterDefinition CharacterDefinition @relation(fields: [characterDefinitionId], references: [id], onDelete: Cascade)
+
+  @@map("character_voice_profiles")
+}
+
+// ------------------------------------------------------------------------------
+// 5. EPISODES (CORE WORKSPACE & PRODUCTION ROOT)
+// ------------------------------------------------------------------------------
+
+model Episode {
+  id                   String        @id @default(uuid()) @db.Uuid
+  seriesId             String        @map("series_id") @db.Uuid
+  title                String        @db.VarChar(255)
+  idea                 String        @db.Text
+  targetAge            String        @map("target_age") @db.VarChar(50)
+  language             String        @default("Spanish") @db.VarChar(50)
+  durationCategory     String?       @map("duration_category") @db.VarChar(50)
+  educationalObjective String?       @map("educational_objective") @db.Text
+  tone                 String?       @db.VarChar(100)
+  status               EpisodeStatus @default(DRAFT)
+  logline              String?       @db.Text
+  moral                String?       @db.Text
+  ending               String?       @db.Text
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  series             Series                 @relation(fields: [seriesId], references: [id], onDelete: Restrict)
+  episodeCharacters  EpisodeCharacter[]
+  scenes             Scene[]
+  assets             Asset[]
+  episodeVersions    EpisodeVersion[]
+  productionJobs     ProductionJob[]
+  providerExecutions ProviderExecution[]
+  qcReport           QCReport?
+  editorialCalendar  EditorialCalendarItem?
+  youtubePublication YouTubePublication?
+
+  @@index([seriesId, status], name: "idx_episodes_series_status")
+  @@map("episodes")
+}
+
+// ------------------------------------------------------------------------------
+// 6. EPISODE CHARACTERS (EPISODIC INSTANCES & OVERRIDES)
+// ------------------------------------------------------------------------------
+
+model EpisodeCharacter {
+  id                    String   @id @default(uuid()) @db.Uuid
+  episodeId             String   @map("episode_id") @db.Uuid
+  characterDefinitionId String?  @map("character_definition_id") @db.Uuid
+  name                  String   @db.VarChar(100)
+  roleDescription       String?  @map("role_description") @db.Text
+  clothingOverride      String?  @map("clothing_override") @db.Text
+  emotionalState        String?  @map("emotional_state") @db.VarChar(100)
+  voiceNotes            String?  @map("voice_notes") @db.Text
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  episode             Episode              @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  characterDefinition CharacterDefinition? @relation(fields: [characterDefinitionId], references: [id], onDelete: SetNull)
+
+  @@index([episodeId], name: "idx_episode_characters_episode_id")
+  @@map("episode_characters")
+}
+
+// ------------------------------------------------------------------------------
+// 7. SCENES (ORDERED AUDIOVISUAL UNITS)
+// ------------------------------------------------------------------------------
+
+model Scene {
+  id                String   @id @default(uuid()) @db.Uuid
+  episodeId         String   @map("episode_id") @db.Uuid
+  sceneIndex        Int      @map("scene_index")
+  sceneCode         String   @map("scene_code") @db.VarChar(50)
+  location          String   @db.VarChar(255)
+  timeOfDay         String   @map("time_of_day") @db.VarChar(50)
+  actionDescription String   @map("action_description") @db.Text
+  cameraDirection   String?  @map("camera_direction") @db.Text
+  dialogueText      String?  @map("dialogue_text") @db.Text
+  narrationText     String?  @map("narration_text") @db.Text
+  soundEffects      String?  @map("sound_effects") @db.Text
+  musicCue          String?  @map("music_cue") @db.Text
+  durationSeconds   Int      @default(15) @map("duration_seconds")
+  visualPrompt      String   @map("visual_prompt") @db.Text
+  motionType        String   @default("pan-left") @map("motion_type") @db.VarChar(50)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  episode Episode @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+
+  @@unique([episodeId, sceneIndex], name: "uq_scene_episode_index")
+  @@index([episodeId], name: "idx_scenes_episode_id")
+  @@map("scenes")
+}
+
+// ------------------------------------------------------------------------------
+// 8. ASSETS (LOGICAL MEDIA SLOTS)
+// ------------------------------------------------------------------------------
+
+model Asset {
+  id               String        @id @default(uuid()) @db.Uuid
+  episodeId        String        @map("episode_id") @db.Uuid
+  type             AssetType
+  slotName         String        @map("slot_name") @db.VarChar(100)
+  currentVersionId String?       @map("current_version_id") @db.Uuid
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  episode  Episode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  versions AssetVersion[]
+
+  @@index([episodeId, type], name: "idx_assets_episode_type")
+  @@map("assets")
+}
+
+// ------------------------------------------------------------------------------
+// 9. ASSET VERSIONS (IMMUTABLE PHYSICAL FILES)
+// ------------------------------------------------------------------------------
+
+model AssetVersion {
+  id                   String        @id @default(uuid()) @db.Uuid
+  assetId              String        @map("asset_id") @db.Uuid
+  versionNumber        Int           @map("version_number")
+  storageDriver        StorageDriver @default(LOCAL) @map("storage_driver")
+  storageKey           String        @map("storage_key") @db.VarChar(1024)
+  mimeType             String        @map("mime_type") @db.VarChar(100)
+  sizeBytes            BigInt        @map("size_bytes")
+  checksumSha256       String        @map("checksum_sha256") @db.VarChar(64)
+  generationParameters Json?         @map("generation_parameters")
+  createdByJobId       String?       @map("created_by_job_id") @db.Uuid
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  asset        Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  createdByJob ProductionJob? @relation(fields: [createdByJobId], references: [id], onDelete: SetNull)
+
+  @@unique([assetId, versionNumber], name: "uq_asset_version_number")
+  @@index([checksumSha256], name: "idx_asset_versions_sha256")
+  @@map("asset_versions")
+}
+
+// ------------------------------------------------------------------------------
+// 10. EPISODE VERSIONS (REPRODUCIBLE INPUT STATE SNAPSHOTS)
+// ------------------------------------------------------------------------------
+
+model EpisodeVersion {
+  id            String   @id @default(uuid()) @db.Uuid
+  episodeId     String   @map("episode_id") @db.Uuid
+  versionNumber Int      @map("version_number")
+  snapshotData  Json     @map("snapshot_data")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  episode        Episode         @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  productionJobs ProductionJob[]
+
+  @@unique([episodeId, versionNumber], name: "uq_episode_version_number")
+  @@index([episodeId], name: "idx_episode_versions_episode_id")
+  @@map("episode_versions")
+}
+
+// ------------------------------------------------------------------------------
+// 11. PRODUCTION JOBS (ASYNC COMPUTATION IN WORKER)
+// ------------------------------------------------------------------------------
+
+model ProductionJob {
+  id               String    @id @default(uuid()) @db.Uuid
+  episodeId        String    @map("episode_id") @db.Uuid
+  episodeVersionId String?   @map("episode_version_id") @db.Uuid
+  type             JobType
+  status           JobStatus @default(PENDING)
+  progress         Int       @default(0)
+  stepDescription  String?   @map("step_description") @db.Text
+  errorMessage     String?   @map("error_message") @db.Text
+  errorDetails     Json?     @map("error_details")
+  startedAt        DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  episode            Episode             @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  episodeVersion     EpisodeVersion?     @relation(fields: [episodeVersionId], references: [id], onDelete: SetNull)
+  steps              JobStep[]
+  assetVersions      AssetVersion[]
+  providerExecutions ProviderExecution[]
+
+  @@index([status, createdAt], name: "idx_production_jobs_status_created")
+  @@index([episodeId], name: "idx_production_jobs_episode_id")
+  @@map("production_jobs")
+}
+
+// ------------------------------------------------------------------------------
+// 12. JOB STEPS (ATOMIC RESUMABLE SUBTASKS)
+// ------------------------------------------------------------------------------
+
+model JobStep {
+  id              String     @id @default(uuid()) @db.Uuid
+  jobId           String     @map("job_id") @db.Uuid
+  stepIndex       Int        @map("step_index")
+  stepKey         String     @map("step_key") @db.VarChar(100)
+  name            String     @db.VarChar(100)
+  status          StepStatus @default(PENDING)
+  inputHash       String     @map("input_hash") @db.VarChar(64)
+  outputReference String?    @map("output_reference") @db.VarChar(1024)
+  attemptCount    Int        @default(1) @map("attempt_count")
+  durationMs      Int?       @map("duration_ms")
+  errorMessage    String?    @map("error_message") @db.Text
+  errorStack      String?    @map("error_stack") @db.Text
+  outputPayload   Json?      @map("output_payload")
+  startedAt       DateTime?  @map("started_at") @db.Timestamptz(6)
+  completedAt     DateTime?  @map("completed_at") @db.Timestamptz(6)
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  job ProductionJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, stepIndex], name: "uq_job_step_index")
+  @@index([jobId, status], name: "idx_job_steps_job_status")
+  @@index([inputHash], name: "idx_job_steps_input_hash")
+  @@map("job_steps")
+}
+
+// ------------------------------------------------------------------------------
+// 13. PROVIDER EXECUTIONS (EXTERNAL INFERENCE & CALL TELEMETRY)
+// ------------------------------------------------------------------------------
+
+model ProviderExecution {
+  id                String       @id @default(uuid()) @db.Uuid
+  jobId             String?      @map("job_id") @db.Uuid
+  episodeId         String?      @map("episode_id") @db.Uuid
+  provider          ProviderType
+  modelOrService    String       @map("model_or_service") @db.VarChar(100)
+  operation         String       @db.VarChar(100)
+  requestHash       String?      @map("request_hash") @db.VarChar(64)
+  latencyMs         Int?         @map("latency_ms")
+  httpStatus        Int?         @map("http_status")
+  errorCode         String?      @map("error_code") @db.VarChar(100)
+  inputUnits        Int          @default(0) @map("input_units")
+  outputUnits       Int          @default(0) @map("output_units")
+  costEur           Decimal?     @map("cost_eur") @db.Decimal(10, 6)
+  rawUsageMetadata  Json?        @map("raw_usage_metadata")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  job     ProductionJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  episode Episode?       @relation(fields: [episodeId], references: [id], onDelete: SetNull)
+
+  @@index([episodeId, createdAt], name: "idx_provider_executions_episode")
+  @@index([provider, createdAt], name: "idx_provider_executions_provider")
+  @@map("provider_executions")
+}
+
+// ------------------------------------------------------------------------------
+// 14. QC REPORTS (QUALITY & COPPA AUDIT ROOT)
+// ------------------------------------------------------------------------------
+
+model QCReport {
+  id                    String   @id @default(uuid()) @db.Uuid
+  episodeId             String   @unique @map("episode_id") @db.Uuid
+  overallScore          Int      @map("overall_score")
+  approvedForProduction Boolean  @default(false) @map("approved_for_production")
+  auditorType           String   @default("AI_ENGINE") @map("auditor_type") @db.VarChar(50)
+  auditorModel          String   @default("gemini-3.8-flash") @map("auditor_model") @db.VarChar(100)
+  auditedAt             DateTime @default(now()) @map("audited_at") @db.Timestamptz(6)
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  episode Episode   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  checks  QCCheck[]
+
+  @@map("qc_reports")
+}
+
+// ------------------------------------------------------------------------------
+// 15. QC CHECKS (ATOMIC AUDIT RULES)
+// ------------------------------------------------------------------------------
+
+model QCCheck {
+  id          String        @id @default(uuid()) @db.Uuid
+  reportId    String        @map("report_id") @db.Uuid
+  category    QCCategory
+  ruleCode    String        @map("rule_code") @db.VarChar(100)
+  severity    QCSeverity    @default(CRITICAL)
+  status      QCCheckStatus @default(PASS)
+  score       Int           @default(100)
+  notes       String?       @db.Text
+  remediation String?       @db.Text
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Relations
+  report QCReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@unique([reportId, ruleCode], name: "uq_qc_check_report_rule")
+  @@index([reportId, status], name: "idx_qc_checks_status")
+  @@map("qc_checks")
+}
+
+// ------------------------------------------------------------------------------
+// 16. EDITORIAL CALENDAR (PERSISTENT BROADCAST INTENTION)
+// ------------------------------------------------------------------------------
+
+model EditorialCalendarItem {
+  id                   String          @id @default(uuid()) @db.Uuid
+  episodeId            String          @unique @map("episode_id") @db.Uuid
+  plannedAt            DateTime        @map("planned_at") @db.Timestamptz(6)
+  timezone             String          @default("UTC") @db.VarChar(50)
+  editorialStatus      EditorialStatus @default(DRAFT_SCHEDULE) @map("editorial_status")
+  notes                String?         @db.Text
+  youtubePublicationId String?         @map("youtube_publication_id") @db.Uuid
+  createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  episode            Episode             @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  youtubePublication YouTubePublication? @relation(fields: [youtubePublicationId], references: [id], onDelete: SetNull)
+
+  @@index([plannedAt, editorialStatus], name: "idx_calendar_planned_status")
+  @@map("editorial_calendar_items")
+}
+
+// ------------------------------------------------------------------------------
+// 17. GOOGLE OAUTH ACCOUNTS (SECURED CREDENTIALS IN REPOSE)
+// ------------------------------------------------------------------------------
+
+model GoogleOAuthAccount {
+  id                    String   @id @default(uuid()) @db.Uuid
+  userId                String   @map("user_id") @db.Uuid
+  googleUserId          String   @map("google_user_id") @db.VarChar(100)
+  email                 String   @db.VarChar(255)
+  encryptedAccessToken  String   @map("encrypted_access_token") @db.Text
+  encryptedRefreshToken String   @map("encrypted_refresh_token") @db.Text
+  iv                    String   @db.VarChar(64)
+  authTag               String   @map("auth_tag") @db.VarChar(64)
+  tokenExpiry           DateTime @map("token_expiry") @db.Timestamptz(6)
+  scopes                Json     @default("[]")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  user               User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channelConnections YouTubeChannelConnection[]
+
+  @@unique([userId, googleUserId], name: "uq_google_oauth_user_account")
+  @@map("google_oauth_accounts")
+}
+
+// ------------------------------------------------------------------------------
+// 18. YOUTUBE CHANNELS (STUDIO REGISTERED CHANNELS)
+// ------------------------------------------------------------------------------
+
+model YouTubeChannel {
+  id               String   @id @default(uuid()) @db.Uuid
+  channelId        String   @unique @map("channel_id") @db.VarChar(100)
+  channelTitle     String   @map("channel_title") @db.VarChar(255)
+  channelCustomUrl String?  @map("channel_custom_url") @db.VarChar(100)
+  subscriberCount  String?  @map("subscriber_count") @db.VarChar(50)
+  videoCount       Int      @default(0) @map("video_count")
+  viewCount        String?  @map("view_count") @db.VarChar(50)
+  avatarUrl        String?  @map("avatar_url") @db.Text
+  isDemoMode       Boolean  @default(false) @map("is_demo_mode")
+  statusMessage    String?  @map("status_message") @db.Text
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  connections  YouTubeChannelConnection[]
+  publications YouTubePublication[]
+
+  @@map("youtube_channels")
+}
+
+// ------------------------------------------------------------------------------
+// 19. YOUTUBE CHANNEL CONNECTIONS (M:N LIFECYCLE & AUTHORIZATION)
+// ------------------------------------------------------------------------------
+
+model YouTubeChannelConnection {
+  id                   String                  @id @default(uuid()) @db.Uuid
+  googleOAuthAccountId String                  @map("google_oauth_account_id") @db.Uuid
+  youtubeChannelId     String                  @map("youtube_channel_id") @db.Uuid
+  status               ChannelConnectionStatus @default(ACTIVE)
+  scopes               Json                    @default("[]")
+  isPrimaryUploader    Boolean                 @default(true) @map("is_primary_uploader")
+  lastVerifiedAt       DateTime?               @map("last_verified_at") @db.Timestamptz(6)
+  revokedAt            DateTime?               @map("revoked_at") @db.Timestamptz(6)
+  createdAt            DateTime                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  googleOAuthAccount GoogleOAuthAccount @relation(fields: [googleOAuthAccountId], references: [id], onDelete: Cascade)
+  youtubeChannel     YouTubeChannel     @relation(fields: [youtubeChannelId], references: [id], onDelete: Cascade)
+
+  @@unique([googleOAuthAccountId, youtubeChannelId], name: "uq_channel_connection")
+  @@index([youtubeChannelId, status], name: "idx_channel_connections_status")
+  @@map("youtube_channel_connections")
+}
+
+// ------------------------------------------------------------------------------
+// 20. YOUTUBE PUBLICATIONS (METADATA & API DISTRIBUTION)
+// ------------------------------------------------------------------------------
+
+model YouTubePublication {
+  id                       String        @id @default(uuid()) @db.Uuid
+  episodeId                String        @unique @map("episode_id") @db.Uuid
+  youtubeChannelId         String        @map("youtube_channel_id") @db.Uuid
+  title                    String        @db.VarChar(100)
+  description              String        @db.Text
+  tags                     Json          @default("[]")
+  hashtags                 Json          @default("[]")
+  madeForKids              Boolean       @default(true) @map("made_for_kids") // COPPA mandatory
+  privacyStatus            PrivacyStatus @default(PRIVATE) @map("privacy_status")
+  categoryId               String        @default("1") @map("category_id") @db.VarChar(20) // Film & Animation
+  thumbnailOverlayText     String?       @map("thumbnail_overlay_text") @db.VarChar(100)
+  recommendedPlaylist      String?       @map("recommended_playlist") @db.VarChar(255)
+  coppaComplianceConfirmed Boolean       @default(true) @map("coppa_compliance_confirmed")
+  scheduledAt              DateTime?     @map("scheduled_at") @db.Timestamptz(6)
+  publishedVideoId         String?       @map("published_video_id") @db.VarChar(100)
+  publishedVideoUrl        String?       @map("published_video_url") @db.Text
+  publishedAt              DateTime?     @map("published_at") @db.Timestamptz(6)
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // Relations
+  episode           Episode                 @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  youtubeChannel    YouTubeChannel          @relation(fields: [youtubeChannelId], references: [id], onDelete: Restrict)
+  calendarItemsRef  EditorialCalendarItem[]
+
+  @@index([youtubeChannelId, privacyStatus], name: "idx_youtube_publications_channel_status")
+  @@map("youtube_publications")
+}

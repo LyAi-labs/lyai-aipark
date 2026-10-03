@@ -34,7 +34,11 @@
             "outputMode": "server",
             "ssr": {
               "entry": "src/server.ts"
-            }
+            },
+            "externalDependencies": [
+              "@google/genai",
+              "@prisma/client"
+            ]
           },
           "configurations": {
             "production": {

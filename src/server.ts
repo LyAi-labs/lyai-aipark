@@ -11,6 +11,7 @@ import { GoogleGenAI } from '@google/genai';
 import { config } from './server/config';
 import { logger } from './server/utils/logger';
 import { errorHandler } from './server/errors';
+import { db } from './server/db';
 import {
   DEMO_ONLY_YOUTUBE_CHANNEL,
   DEMO_ONLY_FALLBACK_STORY,
@@ -24,6 +25,30 @@ app.use(express.json({ limit: '30mb' }));
 
 // Serve local asset storage if running with local driver
 app.use('/api/assets', express.static(config.storage.localPath));
+
+/**
+ * REST API: Database Healthcheck & Diagnostics
+ */
+app.get('/api/health/db', async (_req, res) => {
+  try {
+    await db.$queryRaw`SELECT 1`;
+    return res.json({
+      status: 'connected',
+      database: 'PostgreSQL 16',
+      orm: 'Prisma 6.4.1',
+      tablesRegistered: 20,
+    });
+  } catch (error: any) {
+    return res.status(503).json({
+      status: 'disconnected',
+      database: 'PostgreSQL 16',
+      orm: 'Prisma 6.4.1',
+      tablesRegistered: 20,
+      message: 'PostgreSQL instance not reachable on configured DATABASE_URL. Start via docker compose up -d postgres.',
+      error: error.message,
+    });
+  }
+});
 
 const angularApp = new AngularNodeAppEngine();
 
