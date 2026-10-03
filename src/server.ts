@@ -5,19 +5,30 @@ import {
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
 import express from 'express';
-import {join} from 'node:path';
+import { join } from 'node:path';
 import { GoogleGenAI } from '@google/genai';
+
+import { config } from './server/config';
+import { logger } from './server/utils/logger';
+import { errorHandler } from './server/errors';
+import {
+  DEMO_ONLY_YOUTUBE_CHANNEL,
+  DEMO_ONLY_FALLBACK_STORY,
+  createFakeYouTubePublication,
+} from './server/mocks/demo-data';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
 app.use(express.json({ limit: '30mb' }));
 
+// Serve local asset storage if running with local driver
+app.use('/api/assets', express.static(config.storage.localPath));
+
 const angularApp = new AngularNodeAppEngine();
 
-// Initialize Gemini AI SDK if GEMINI_API_KEY is available
-const apiKey = process.env['GEMINI_API_KEY'] || '';
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+// Initialize Gemini AI SDK if configured in centralized config
+const ai = config.ai.hasApiKey ? new GoogleGenAI({ apiKey: config.ai.geminiApiKey }) : null;
 
 // Estimated pricing in Euros (EUR) for Gemini 3.8 Flash & Imagen
 const EUR_PER_1M_INPUT_TOKENS = 0.09;
@@ -28,7 +39,7 @@ const EUR_PER_TTS_1K_CHARS = 0.015;
 /**
  * REST API: Story Generation
  */
-app.post('/api/generate-story', async (req, res) => {
+app.post('/api/generate-story', async (req, res, next) => {
   try {
     const { idea, title, targetAge, language, duration, educationalObjective, tone, numberOfScenes, seriesContext } = req.body;
 
@@ -84,7 +95,7 @@ You MUST return ONLY valid JSON matching this schema:
 
     if (ai) {
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: config.ai.defaultModel,
         contents: [
           { role: 'user', parts: [{ text: `${systemPrompt}\n\nUSER IDEA: "${idea || 'Un pequeño zorro aprende por qué es importante compartir sus juguetes'}"` }] }
         ],
@@ -100,6 +111,8 @@ You MUST return ONLY valid JSON matching this schema:
       const outputTokens = response.usageMetadata?.candidatesTokenCount || 900;
       const costEur = (inputTokens * EUR_PER_1M_INPUT_TOKENS + outputTokens * EUR_PER_1M_OUTPUT_TOKENS) / 1_000_000;
 
+      logger.info('Story generated successfully via Gemini API', { model: config.ai.defaultModel, inputTokens, outputTokens });
+
       return res.json({
         success: true,
         story: parsed,
@@ -107,110 +120,22 @@ You MUST return ONLY valid JSON matching this schema:
           inputTokens,
           outputTokens,
           costEur: Number(costEur.toFixed(6)),
-          modelUsed: 'gemini-3.8-flash',
+          modelUsed: config.ai.defaultModel,
           isRealAi: true
         }
       });
     }
 
     // Fallback template when API key is not configured or in offline demo mode
-    const fallbackStory = {
-      title: title || 'Milo y la Caja de las Sorpresas',
-      logline: 'Un pequeño zorro llamado Milo descubre que la verdadera magia de sus juguetes aparece cuando los comparte con sus amigos del bosque.',
-      target_age: targetAge || '4-6',
-      educational_objective: educationalObjective || 'Compartir y empatía grupal',
-      characters: [
-        {
-          name: 'Milo',
-          species: 'Zorro',
-          personality: 'Curioso, entusiasta pero un poco posesivo con sus inventos',
-          age: '5 años',
-          visualFeatures: 'Pelaje naranja brillante, hocico crema suave, grandes ojos avellana expresivos',
-          clothing: 'Mochila verde oliva con broches amarillos y pequeña bufanda tejida',
-          colorPalette: ['#EA580C', '#FEF3C7', '#65A30D'],
-          voiceProfile: 'Voz infantil cálida, tono travieso y alegre (pitch: 1.05, speed: 0.95)',
-          visualConsistencyPrompt: 'Cute original 3D cartoon fox, orange fur, cream muzzle, large expressive hazel eyes, green backpack, rounded proportions, friendly facial expression, studio lighting, Pixar aesthetic.',
-          masterPrompt: 'Protagonist Milo: Stylized 3D fox character, clean geometry, ultra-soft fur shaders, vibrant cartoon palette, consistent silhouette.'
-        },
-        {
-          name: 'Tula',
-          species: 'Liebre',
-          personality: 'Ágil, bondadosa y apasionada por los juegos al aire libre',
-          age: '5 años',
-          visualFeatures: 'Pelaje gris perla, orejas largas con puntas blancas, sonrisa tímida',
-          clothing: 'Chaleco azul cielo con estrellas bordadas',
-          colorPalette: ['#94A3B8', '#BAE6FD', '#F8FAFC'],
-          voiceProfile: 'Voz suave, dulce y rápida (pitch: 1.15, speed: 1.0)',
-          visualConsistencyPrompt: 'Cute 3D cartoon hare, soft silver fur, sky blue vest, friendly large ears, Pixar animated film quality, consistent design.',
-          masterPrompt: 'Tula the hare: delicate animated character, expressive eyes, sky-blue vest, smooth shading.'
-        }
-      ],
-      scenes: [
-        {
-          scene_id: 'SCENE_01',
-          location: 'El Claro del Roble Dorado',
-          time: 'Mañana soleada',
-          characters: ['Milo'],
-          action: 'Milo salta emocionado abriendo una brillante caja de madera llena de peonzas de cristal.',
-          camera: 'Plano general medio con suave paneo horizontal siguiendo a Milo',
-          dialogue: '¡Mirad esto! ¡Son mis peonzas mágicas y brillan como luciérnagas!',
-          narration: 'En el corazón del bosque, el sol de la mañana iluminaba el mayor tesoro de Milo.',
-          sound_effects: 'Trino de pájaros, crujido de hojas secas, tintineo mágico de cristal',
-          music: 'Melodía alegre de xilófono y pizzicato de cuerdas',
-          duration: 16,
-          visual_prompt: 'High quality 3D cartoon scene, Milo the orange fox sitting near a massive golden oak tree opening a polished wooden chest filled with luminous spinning tops, warm morning sunbeams, cinematic cartoon rendering.'
-        },
-        {
-          scene_id: 'SCENE_02',
-          location: 'El Sendero de los Tréboles',
-          time: 'Mediodía',
-          characters: ['Milo', 'Tula'],
-          action: 'Tula se acerca con curiosidad estirando la patita para ver una peonza, pero Milo la abraza contra su pecho.',
-          camera: 'Primer plano de las expresiones: asombro en Tula y duda protectora en Milo',
-          dialogue: 'Tula: "¿Puedo hacer girar una? ¡Parecen estrellas!" — Milo: "Oh... son muy delicadas, Tula."',
-          narration: 'Milo quería proteger su tesoro, pero notó una pequeña sombra de tristeza en los ojos de su amiga.',
-          sound_effects: 'Brisa suave, pisadas ligeras sobre hierba',
-          music: 'Cuerdas más lentas y reflexivas en tono menor suave',
-          duration: 18,
-          visual_prompt: '3D cartoon frame of Milo holding his wooden chest defensively while Tula the silver hare gazes with gentle longing, emerald forest backdrop, emotionally expressive 3D character animation render.'
-        },
-        {
-          scene_id: 'SCENE_03',
-          location: 'La Colina del Viento Dulce',
-          time: 'Tarde dorada',
-          characters: ['Milo', 'Tula'],
-          action: 'Milo suspira, sonríe y le entrega la peonza azul más hermosa a Tula. Ambos las hacen bailar juntas en una roca plana.',
-          camera: 'Travelling circular mostrando las dos peonzas girando y la sincronía de risas de los personajes',
-          dialogue: '¡Giran el doble de rápido si las lanzamos juntos! ¡Mira la luz que hacen!',
-          narration: 'Fue en ese instante cuando Milo comprendió que un juguete solo es divertido si hay alguien con quien reír.',
-          sound_effects: 'Zumbido armonioso de peonzas girando, carcajadas infantiles',
-          music: 'Crescendo optimista con flauta traversa y campanillas',
-          duration: 20,
-          visual_prompt: 'Cinematic 3D animation scene, Milo and Tula cheering joyfully as two glowing spinning tops dance on a flat river stone, glowing swirl trails, warm sunset colors, beautiful Disney-Pixar render style.'
-        },
-        {
-          scene_id: 'SCENE_04',
-          location: 'El Hogar del Roble al Atardecer',
-          time: 'Puesta de sol',
-          characters: ['Milo', 'Tula'],
-          action: 'Milo y Tula guardan los juguetes juntos en la caja, despidiéndose con un choque de patitas.',
-          camera: 'Plano general alejándose lentamente hacia el cielo estrellado que empieza a nacer',
-          dialogue: '¡Mañana inventaremos un circuito nuevo para todos los amigos!',
-          narration: 'Y aquella tarde, la caja de Milo ya no guardaba solo peonzas: guardaba una amistad que brillaba para siempre.',
-          sound_effects: 'Cierre suave de la caja de madera, grillos del atardecer',
-          music: 'Tema principal en piano suave y cuerdas cálidas concluyendo con nota dulce',
-          duration: 16,
-          visual_prompt: 'Peaceful 3D cartoon sunset scene, Milo the fox and Tula the hare waving goodbye by a cozy hollow tree house, fireflies emerging, purple and orange twilight sky, end of episode frame.'
-        }
-      ],
-      ending: 'Milo descubre que compartir sus juguetes multiplica la diversión y crea recuerdos felices.',
-      moral: 'La alegría compartida se vuelve el doble de brillante.',
-      quality_notes: 'Cumple al 100% con los estándares pedagógicos para 4-6 años: sin elementos agresivos, vocabulario constructivo y resolución empática.'
-    };
-
+    logger.warn('Gemini API key not configured. Returning DEMO_ONLY_FALLBACK_STORY');
     return res.json({
       success: true,
-      story: fallbackStory,
+      story: {
+        ...DEMO_ONLY_FALLBACK_STORY,
+        title: title || DEMO_ONLY_FALLBACK_STORY.title,
+        target_age: targetAge || DEMO_ONLY_FALLBACK_STORY.target_age,
+        educational_objective: educationalObjective || DEMO_ONLY_FALLBACK_STORY.educational_objective
+      },
       metrics: {
         inputTokens: 0,
         outputTokens: 0,
@@ -220,17 +145,17 @@ You MUST return ONLY valid JSON matching this schema:
       }
     });
   } catch (error: any) {
-    console.error('Error in /api/generate-story:', error);
-    return res.status(500).json({ success: false, error: error.message || 'Error generating story' });
+    logger.error('Error generating story in /api/generate-story', { error: error.message });
+    return next(error);
   }
 });
 
 /**
  * REST API: Character Consistency & Master Prompts Generation
  */
-app.post('/api/generate-character', async (req, res) => {
+app.post('/api/generate-character', async (req, res, next) => {
   try {
-    const { name, species, personality, age, targetAudience, seriesStyle } = req.body;
+    const { name, species, personality, age, seriesStyle } = req.body;
 
     if (ai) {
       const prompt = `Act as lead Character Designer for 3D animation. Create a comprehensive, consistent character bible entry for:
@@ -261,16 +186,18 @@ Return JSON:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: config.ai.defaultModel,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: 'application/json' }
       });
 
       const characterData = JSON.parse(response.text || '{}');
+      logger.info('Character bible generated via Gemini API', { name: characterData.name });
       return res.json({ success: true, character: characterData, isRealAi: true });
     }
 
     // Default fallback
+    logger.warn('Gemini API key not configured. Returning DEMO character');
     return res.json({
       success: true,
       character: {
@@ -294,14 +221,15 @@ Return JSON:
       isRealAi: false
     });
   } catch (error: any) {
-    return res.status(500).json({ success: false, error: error.message });
+    logger.error('Error generating character in /api/generate-character', { error: error.message });
+    return next(error);
   }
 });
 
 /**
  * REST API: Quality Control Evaluation
  */
-app.post('/api/quality-control', async (req, res) => {
+app.post('/api/quality-control', async (req, res, next) => {
   try {
     const { story, targetAge } = req.body;
 
@@ -333,15 +261,17 @@ Perform thorough QA and return JSON matching:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: config.ai.defaultModel,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: 'application/json' }
       });
 
+      logger.info('Quality control evaluation generated via Gemini API');
       return res.json({ success: true, report: JSON.parse(response.text || '{}'), isRealAi: true });
     }
 
     // High fidelity QA response
+    logger.warn('Gemini API key not configured or story missing. Returning DEMO QC report');
     return res.json({
       success: true,
       report: {
@@ -364,14 +294,15 @@ Perform thorough QA and return JSON matching:
       isRealAi: false
     });
   } catch (error: any) {
-    return res.status(500).json({ success: false, error: error.message });
+    logger.error('Error evaluating QC in /api/quality-control', { error: error.message });
+    return next(error);
   }
 });
 
 /**
  * REST API: YouTube Metadata & COPPA Compliance Generator
  */
-app.post('/api/generate-metadata', async (req, res) => {
+app.post('/api/generate-metadata', async (req, res, next) => {
   try {
     const { story, language, channelName } = req.body;
 
@@ -399,14 +330,16 @@ Return JSON:
 }`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: config.ai.defaultModel,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: 'application/json' }
       });
 
+      logger.info('YouTube metadata generated via Gemini API');
       return res.json({ success: true, metadata: JSON.parse(response.text || '{}'), isRealAi: true });
     }
 
+    logger.warn('Gemini API key not configured or story missing. Returning DEMO metadata');
     return res.json({
       success: true,
       metadata: {
@@ -435,49 +368,26 @@ Return JSON:
       isRealAi: false
     });
   } catch (error: any) {
-    return res.status(500).json({ success: false, error: error.message });
+    logger.error('Error generating metadata in /api/generate-metadata', { error: error.message });
+    return next(error);
   }
 });
 
 /**
- * REST API: YouTube Channel Status & Upload Pipeline
+ * REST API: YouTube Channel Status & Upload Pipeline (MOCK / DEMO_ONLY)
  */
-const mockConnectedChannel = {
-  connected: true,
-  isDemoMode: true,
-  channelId: 'UC-KTN-KIDSTOON-STUDIO-DEMO',
-  channelTitle: 'KidsToon Studio Oficial (Sandbox)',
-  channelCustomUrl: '@KidsToonStudioOfficial',
-  subscriberCount: '142,500',
-  videoCount: 48,
-  viewCount: '18,430,920',
-  avatarUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=160&auto=format&fit=crop&q=80',
-  statusMessage: 'Canal Sandbox conectado en modo Demostración. Publicaciones reales requieren OAuth de YouTube habilitado.'
-};
-
-app.get('/api/youtube/status', (req, res) => {
+app.get('/api/youtube/status', (_req, res) => {
   res.json({
     success: true,
-    channel: mockConnectedChannel
+    channel: DEMO_ONLY_YOUTUBE_CHANNEL
   });
 });
 
 app.post('/api/youtube/publish', (req, res) => {
-  const { projectId, episodeTitle, privacyStatus, scheduledAt, madeForKids } = req.body;
+  const { projectId, episodeTitle, privacyStatus, scheduledAt } = req.body;
+  const publishedRecord = createFakeYouTubePublication(projectId, episodeTitle, privacyStatus, scheduledAt);
 
-  const publishedRecord = {
-    publishId: 'pub_' + Date.now().toString(36),
-    projectId,
-    title: episodeTitle,
-    privacyStatus: privacyStatus || 'private',
-    scheduledAt: scheduledAt || null,
-    madeForKids: madeForKids ?? true,
-    publishedAt: scheduledAt ? null : new Date().toISOString(),
-    youtubeVideoId: 'yt_' + Math.random().toString(36).substring(2, 9),
-    youtubeUrl: `https://youtube.com/watch?v=mock_${Math.random().toString(36).substring(2, 7)}`,
-    status: scheduledAt ? 'scheduled' : 'published',
-    isDemo: mockConnectedChannel.isDemoMode
-  };
+  logger.warn('Executing DEMO YouTube publish (no actual YouTube API call made)', { projectId });
 
   return res.json({
     success: true,
@@ -491,7 +401,7 @@ app.post('/api/youtube/publish', (req, res) => {
 /**
  * REST API: Real-time cost estimator & budget controls
  */
-app.get('/api/cost-summary', (req, res) => {
+app.get('/api/cost-summary', (_req, res) => {
   res.json({
     pricingRates: {
       currency: 'EUR',
@@ -502,9 +412,14 @@ app.get('/api/cost-summary', (req, res) => {
     },
     authorizedBudgetEur: 5.00,
     currentExpenditureEur: 0.042,
-    hasApiKey: !!apiKey
+    hasApiKey: config.ai.hasApiKey
   });
 });
+
+/**
+ * Global API Error Handling Middleware
+ */
+app.use(errorHandler);
 
 /**
  * Serve static files from /browser
@@ -531,16 +446,20 @@ app.use((req, res, next) => {
 
 /**
  * Start the server if this module is the main entry point, or it is ran via PM2.
- * The server listens on the port defined by the `PORT` environment variable, or defaults to 4000.
  */
 if (isMainModule(import.meta.url) || process.env['pm_id']) {
-  const port = process.env['PORT'] || 4000;
+  const port = config.app.port;
   app.listen(port, (error) => {
     if (error) {
+      logger.error('Failed to start Node Express server', { error: error.message });
       throw error;
     }
 
-    console.log(`Node Express server listening on http://localhost:${port}`);
+    logger.info(`Node Express server listening on http://localhost:${port}`, {
+      env: config.app.env,
+      storageDriver: config.storage.driver,
+      aiConfigured: config.ai.hasApiKey
+    });
   });
 }
 
@@ -548,4 +467,3 @@ if (isMainModule(import.meta.url) || process.env['pm_id']) {
  * Request handler used by the Angular CLI (for dev-server and during build) or Firebase Cloud Functions.
  */
 export const reqHandler = createNodeRequestHandler(app);
-
