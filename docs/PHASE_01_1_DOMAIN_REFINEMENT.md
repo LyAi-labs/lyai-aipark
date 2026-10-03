@@ -268,72 +268,47 @@ Representa exclusivamente la presencia del vídeo en YouTube:
 
 ---
 
-### 2.8. Congelación Técnica Determinista: `EpisodeVersion`
+### 2.8. Snapshot Inmutable de Inputs: `EpisodeVersion` (Reproducible Input State)
 
-#### Diagnóstico del Problema en Phase 01
-Si un usuario edita un diálogo o reordena escenas mientras `cartoon-worker` está renderizando el vídeo en segundo plano, se produce una **condición de carrera**: el worker podría leer escenas mezcladas de distintas revisiones, corrompiendo el resultado final.
+> *Nota de rigor técnico (Phase 01.2):* Congelar inputs **NO** garantiza determinismo en modelos generativos estocásticos de terceros (Gemini, Imagen 3). Garantiza un **reproducible input state** inmutable.
 
-#### Solución Canónica: Snapshot Inmutable (`EpisodeVersion`)
 Antes de iniciar un trabajo pesado de renderizado (`VIDEO_RENDER`) o una auditoría formal (`QC_AUDIT`):
 
 1. El sistema crea un `EpisodeVersion` inmutable:
    * `id`: UUID.
    * `episode_id`: FK `episodes.id`.
    * `version_number`: Secuencial entero (v1, v2, v3...).
-   * `snapshot_data`: JSONB completo con el árbol congelado en ese instante exacto:
-     * Guion (título, logline, moral).
-     * Escenas ordenadas con duraciones, diálogos y motion types.
-     * IDs y hashes de las versiones exactas de audio e imagen que se utilizarán (`asset_version_id`).
-     * Personajes y perfiles de voz asignados.
+   * `snapshot_data`: JSONB completo con el árbol congelado en ese instante exacto (guion, escenas ordenadas con duraciones, motion types, IDs y hashes SHA-256 de `asset_versions` fijas).
    * `created_at`: Timestamp.
 2. El `ProductionJob` de renderizado se vincula a este `EpisodeVersion` y **consume exclusivamente los datos del snapshot**.
-3. El usuario puede seguir editando el episodio en el frontend sin interferir con el render en curso. Si desea aplicar los nuevos cambios al vídeo final, se lanza un nuevo render sobre un nuevo `EpisodeVersion`.
+3. El usuario puede seguir editando el episodio en el frontend sin interferir con el render en curso.
 
 ---
 
-### 2.9. Clarificación de Ownership: `EditorialCalendarItem`
+### 2.9. Intención Editorial Persistente: `EditorialCalendarItem`
 
-#### Diagnóstico del Problema en Phase 01
-Se planteó `EditorialCalendarItem` como una tabla persistente con estado independiente (`draft`, `scheduled`, `published`).  
-Esto crea una **duplicidad de fuentes de verdad**:
-* Si un episodio se marca como programado en el calendario para el 15 de octubre, pero en la publicación de YouTube se programó para el 20 de octubre, la base de datos queda inconsistente.
+> *Resolución definitiva (Phase 01.2):* Se mantiene como **tabla física persistente** para modelar la intención de emisión previa e independiente del estado de YouTube.
 
-#### Solución Canónica: Entidad Proyectada / Vista Derivada
-El calendario editorial **NO es una tabla independiente**. Es una **vista consolidada (SQL View o Service Query)** calculada a partir de dos entidades con responsabilidades unívocas:
-
-1. **Episodios en Producción:** Contienen `target_broadcast_date: DATE` (fecha deseada por el showrunner antes de preparar YouTube).
-2. **Publicaciones de YouTube:** Contienen `scheduled_at: TIMESTAMPTZ` y `privacy_status: 'SCHEDULED'` (programación formal verificada en YouTube API).
-
-La consulta del calendario editorial (`GET /api/v1/calendar`) realiza una unión indexada:
-```sql
-SELECT 
-  e.id AS episode_id,
-  e.title,
-  COALESCE(p.scheduled_at::DATE, e.target_broadcast_date) AS calendar_date,
-  COALESCE(p.privacy_status::text, 'DRAFT') AS status,
-  p.published_video_url
-FROM episodes e
-LEFT JOIN youtube_publications p ON p.episode_id = e.id
-WHERE e.status != 'ARCHIVED';
-```
-Esta arquitectura garantiza que es matemáticamente imposible que el calendario muestre una fecha distinta a la programada en YouTube.
+El calendario editorial representa la **intención de programación** del showrunner:
+* Contiene: `episode_id`, `planned_at` (TIMESTAMPTZ), `timezone`, `editorial_status` (`DRAFT_SCHEDULE`, `CONFIRMED`, `RESCHEDULED`, `BROADCASTED`), `notes` y referencia opcional `youtube_publication_id`.
+* Se desacopla formalmente de los estados de `Episode` y `YouTubePublication`.
 
 ---
 
-### 2.10. Impacto sobre el Futuro Esquema PostgreSQL / Prisma
+### 2.10. Evolución del Inventario hacia Phase 01.2 (20 Tablas Normalizadas)
 
-El refinamiento de la Phase 01.1 transforma la propuesta inicial en un esquema de **16 tablas altamente normalizadas** preparadas para la Phase 02:
+> Inventario detallado y cierre de cardinalidades en: [docs/PHASE_01_2_DOMAIN_CLOSURE.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_2_DOMAIN_CLOSURE.md)
 
-| Tabla Inicial (Phase 01) | Esquema Refinado (Phase 01.1) | Justificación Arquitectónica |
+| Concepto | Resolución en Phase 01.2 | Justificación Arquitectónica |
 | :--- | :--- | :--- |
-| `characters` | `character_definitions` + `episode_characters` | Separación estricta de biblia maestra de franquicia y apariciones en episodio. |
-| `assets` | `assets` + `asset_versions` | Inmutabilidad de archivos generados, hashing SHA-256 y soporte de re-generaciones. |
-| `production_jobs` | `production_jobs` + `job_steps` | Ejecución atómica por fases con capacidad de reanudación (*resumability*). |
-| `qc_reports` | `qc_reports` + `qc_checks` | Desglose granular de reglas COPPA y calidad para auditorías agregadas por SQL. |
-| `youtube_oauth_credentials` | `google_oauth_accounts` + `youtube_channels` | Autenticación centrada en cuenta Google con soporte para múltiples canales. |
-| `cost_metrics` | `provider_executions` | Telemetría forense por llamada (latencia, HTTP status, tokens, coste exacto en €). |
-| *Inexistente* | `episode_versions` | Snapshots inmutables que congelan el episodio para renderizado determinista sin colisiones. |
-| `editorial_calendar_items` | *Eliminada como tabla física* | Convertida en vista relacional proyectada sobre `episodes` y `youtube_publications`. |
+| **Personajes** | `character_definitions` + `episode_characters` | Biblia maestra de franquicia vs overrides locales por capítulo. |
+| **Multimedia** | `assets` + `asset_versions` | Inmutabilidad de archivos físicos con verificación SHA-256. |
+| **Jobs y Resumabilidad** | `production_jobs` + `job_steps` | Subtareas con `input_hash` para reanudación idempotente. |
+| **Calidad & COPPA** | `qc_reports` + `qc_checks` | Reglas atómicas normalizadas; eliminación de engagement de QC. |
+| **YouTube & OAuth** | `google_oauth_accounts` + `youtube_channels` + `youtube_channel_connections` | Múltiples cuentas Google autorizando el mismo canal de YouTube. |
+| **Telemetría & Coste** | `provider_executions` | Telemetría técnica con `cost_eur` nullable (elimina `cost_metrics`). |
+| **Freeze de Inputs** | `episode_versions` | Snapshot inmutable de inputs para renderizado sin colisiones en UI. |
+| **Calendario** | `editorial_calendar_items` | Tabla física de intención editorial independiente de YouTube. |
 
 ---
 

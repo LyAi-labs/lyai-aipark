@@ -285,28 +285,26 @@ Tras la auditoría forense del prototipo, se determinó que la entidad `Project`
 * `/episodes/:id/publish`
 * `/calendar`, `/analytics`, `/library`, `/settings`
 
-### 2.5.8. Propuesta de Base de Datos Relacional (PostgreSQL / Prisma)
-Esquema de **16 tablas normalizadas** (refinado en Phase 01.1):
-`users`, `series`, `episodes`, `character_definitions`, `episode_characters`, `character_voice_profiles`, `scenes`, `assets`, `asset_versions`, `episode_versions`, `production_jobs`, `job_steps`, `provider_executions`, `qc_reports`, `qc_checks`, `google_oauth_accounts`, `youtube_channels`, `youtube_publications`.
+### 2.5.8. Propuesta de Base de Datos Relacional Definitiva (PostgreSQL / Prisma)
+Esquema formal de **20 tablas físicas normalizadas en 3ª Forma Normal** (cerrado en Phase 01.2):
+`users`, `series`, `character_definitions`, `character_voice_profiles`, `episodes`, `episode_characters`, `scenes`, `assets`, `asset_versions`, `episode_versions`, `production_jobs`, `job_steps`, `provider_executions`, `qc_reports`, `qc_checks`, `editorial_calendar_items`, `google_oauth_accounts`, `youtube_channels`, `youtube_channel_connections`, `youtube_publications`.
 
 ### 2.5.9. Fronteras de Seguridad & Privacidad Infantil (COPPA)
-1. **Tokens OAuth encriptados:** Cifrado simétrico AES-256-GCM para tokens de Google/YouTube en `google_oauth_accounts`.
+1. **Tokens OAuth encriptados:** Cifrado simétrico AES-256-GCM para credenciales de Google/YouTube en backend (`google_oauth_accounts`).
 2. **COPPA Inmutable:** `madeForKids: true` forzado a nivel de base de datos y esquema.
 3. **Visibilidad Privada Obligatoria:** Publicación predeterminada en `PRIVATE` para revisión humana obligatoria en YouTube Studio.
 4. **Validación Zod estricta:** Filtrado y validación de respuestas LLM antes de persistencia.
 
-### 2.5.10. Refinamiento Canónico del Dominio (Phase 01.1)
-> Documento exhaustivo: [docs/PHASE_01_1_DOMAIN_REFINEMENT.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_1_DOMAIN_REFINEMENT.md)
-1. **Personajes:** `CharacterDefinition` (Biblia de franquicia inmutable) ──► `EpisodeCharacter` (Instancia con overrides de vestuario/acting por capítulo).
-2. **Multimedia Inmutable:** `Asset` (Identidad lógica) ──► `AssetVersion` (Archivos inmutables versionados con hash SHA-256).
-3. **Subtareas Atómicas:** `ProductionJob` ──► `JobStep` (Subtareas con duración y reanudabilidad idempotente tras fallo).
-4. **Calidad Normalizada:** `QCReport` ──► `QCCheck` (Evaluaciones atómicas por regla COPPA/Calidad indexables por SQL).
-5. **Ownership OAuth 2.0:** `User ──► GoogleOAuthAccount ──► YouTubeChannel` (Soporte multicanal por cuenta Google con tokens cifrados).
-6. **Telemetría Exacta:** `ProviderExecution` (Registro de cada inferencia con latencia, HTTP status, tokens y coste exacto en €).
-7. **Desacoplamiento Total de Estados:** `EpisodeStatus` (Editorial) vs `JobStatus` (Técnico Worker) vs `PublicationStatus` (YouTube).
-8. **Congelación Determinista:** `EpisodeVersion` (Snapshot inmutable consumido por el render FFmpeg para evitar colisiones por edición en UI).
-9. **Calendario Editorial:** Proyección virtual (Query/View SQL sobre `episodes` y `youtube_publications`), erradicando duplicidades.
-10. **Esquema Prisma Definitivo:** 16 tablas en 3ª Forma Normal listas para migración en Phase 02.
+### 2.5.10. Cierre Definitivo de Dominio (Phase 01.2)
+> Documento exhaustivo: [docs/PHASE_01_2_DOMAIN_CLOSURE.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_2_DOMAIN_CLOSURE.md)
+1. **YouTube & OAuth:** `GoogleOAuthAccount ──► YouTubeChannelConnection ──► YouTubeChannel` (conexión M:N que permite múltiples cuentas Google autorizando el mismo canal de YouTube; refresh tokens exclusivamente en backend).
+2. **EpisodeStatus Canónico:** `DRAFT` ──► `READY_FOR_PRODUCTION` ──► `IN_PRODUCTION` ──► `READY_FOR_REVIEW` ──► `APPROVED` ──► `ARCHIVED` (desacoplado formalmente de los pasos técnicos de `ProductionJob`).
+3. **Calendario Editorial:** `editorial_calendar_items` como tabla física de **intención editorial** (`planned_at`, `timezone`, `editorial_status`, `notes`) separada de `YouTubePublication`.
+4. **Inventario Cerrado:** 20 tablas físicas exactas. `CostMetric` eliminada como tabla física y consolidada en `provider_executions`.
+5. **EpisodeVersion:** Formulado técnicamente como *immutable production snapshot / reproducible input state* (asumiendo la naturaleza estocástica de los LLMs/difusión).
+6. **JobStep Idempotente:** Reanudación segura de pasos basada en `input_hash: VARCHAR(64)` (SHA-256 del payload de entrada de cada subtarea).
+7. **Control de Calidad (QC):** Aprobación gobernada por 0 fallos críticos en reglas atómicas (`QCCheck`); eliminación de engagement del núcleo de QC.
+8. **ProviderExecution:** Telemetría técnica separada de contabilidad con `cost_eur` nullable (para operaciones gratuitas o cuotas incluidas).
 
 ---
 
@@ -582,15 +580,16 @@ Durante la Phase 00 se detectó lógica de negocio crítica que actualmente resi
   * [x] Especificación técnica base en [docs/PHASE_01_DOMAIN_DESIGN.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_DOMAIN_DESIGN.md).
 * **[x] PHASE 01.1 — DOMAIN MODEL REFINEMENT (COMPLETADA A NIVEL DE DISEÑO)**
   * [x] Refinamiento de 10 puntos de diseño en [docs/PHASE_01_1_DOMAIN_REFINEMENT.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_1_DOMAIN_REFINEMENT.md).
-  * [x] Desacoplamiento de `CharacterDefinition` y `EpisodeCharacter`.
-  * [x] Versionado inmutable de assets (`Asset` ──► `AssetVersion` con hash SHA-256).
-  * [x] Desglose de tareas pesadas en subtareas atómicas reanudables (`JobStep`).
-  * [x] Auditoría de calidad y COPPA normalizada por reglas (`QCCheck`).
-  * [x] Modelo OAuth centrado en cuenta Google (`GoogleOAuthAccount` ──► `YouTubeChannel`).
-  * [x] Telemetría exacta de inferencia y costes unitarios (`ProviderExecution`).
-  * [x] Snapshots inmutables de producción (`EpisodeVersion`) para render determinista.
-  * [x] Calendario editorial proyectado como vista SQL unificada.
-  * [x] Esquema relacional definitivo ampliado a 16 tablas en 3ª Forma Normal para Prisma/PostgreSQL.
+* **[x] PHASE 01.2 — DOMAIN ARCHITECTURE CLOSURE (CIERRE DEFINITIVO DE DOMINIO)**
+  * [x] Cierre de 8 puntos críticos en [docs/PHASE_01_2_DOMAIN_CLOSURE.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_2_DOMAIN_CLOSURE.md).
+  * [x] Modelo M:N `GoogleOAuthAccount ──► YouTubeChannelConnection ──► YouTubeChannel`.
+  * [x] `EpisodeStatus` canónico editorial desacoplado de las etapas de worker/jobs.
+  * [x] `editorial_calendar_items` mantenida como tabla física de intención editorial.
+  * [x] Inventario formal cerrado en 20 tablas físicas (eliminación de `CostMetric` en favor de `provider_executions`).
+  * [x] Formulación rigurosa de `EpisodeVersion` como *reproducible input state*.
+  * [x] Idempotencia y reanudabilidad de `JobStep` garantizada por `input_hash: VARCHAR(64)`.
+  * [x] Rediseño de control de calidad: aprobación basada en 0 fallos críticos en `QCCheck` y exclusión de engagement.
+  * [x] `ProviderExecution` con `cost_eur` nullable y separación de telemetría de contabilidad.
 * **[ ] PHASE 02 — POSTGRESQL & PERSISTENCE ENGINE (PENDIENTE DE REVISIÓN Y APROBACIÓN)**
 
 ---
@@ -598,5 +597,5 @@ Durante la Phase 00 se detectó lógica de negocio crítica que actualmente resi
 ## 12. REGLA DE CONTINUIDAD
 1. **Rama `main` intacta** en el baseline original de Google AI Studio (`1eae2f8`).
 2. **Desarrollo activo en `Try1`** con cimientos de arquitectura Server-First.
-3. Se esperará confirmación del usuario tras la revisión de Phase 01.1 antes de proceder con la implementación de **PHASE 02**.
+3. Se esperará confirmación del usuario tras la revisión de Phase 01.2 antes de proceder con la implementación de **PHASE 02**.
 

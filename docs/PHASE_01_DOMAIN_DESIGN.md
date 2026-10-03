@@ -557,30 +557,30 @@ Para proteger los activos y cumplir normativas internacionales:
 
 ---
 
-## 13. RESOLUCIÓN DE DECISIONES DE DISEÑO (CONSOLIDACIÓN PHASE 01.1)
+## 13. RESOLUCIÓN DE DECISIONES DE DISEÑO (CONSOLIDACIÓN PHASE 01.1 & 01.2)
 
-> Documento de especificación de refinamiento: [docs/PHASE_01_1_DOMAIN_REFINEMENT.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_1_DOMAIN_REFINEMENT.md)
+> Documento de cierre definitivo: [docs/PHASE_01_2_DOMAIN_CLOSURE.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_2_DOMAIN_CLOSURE.md)
 
-Las decisiones inicialmente abiertas han sido zanjadas y formalizadas:
+Las decisiones de arquitectura de dominio han sido zanjadas y formalizadas:
 
 | ID | Asunto | Resolución Arquitectónica Adoptada | Justificación |
 | :--- | :--- | :--- | :--- |
 | **ADR-06** | **Personajes** | **`CharacterDefinition` (Series) + `EpisodeCharacter` (Episode)** | Separación de biblia maestra inmutable y variaciones de vestuario/acting por capítulo. |
 | **ADR-07** | **Orden de Escenas** | **`scene_index INT` con `UNIQUE(episode_id, scene_index)`** | Orden determinista indexado por B-Tree con reordenación transaccional atómica. |
-| **ADR-08** | **Reanudabilidad de Jobs** | **`ProductionJob` + `JobStep` (Subtareas atómicas)** | Idempotencia y reanudación granular sin reiniciar renders desde cero. |
-| **ADR-09** | **Calidad & COPPA** | **`QCReport` + `QCCheck` (Normalizado)** | Validación individual de reglas COPPA y calidad auditables vía SQL. |
-| **ADR-10** | **Ownership OAuth** | **`GoogleOAuthAccount` (User) ──► `YouTubeChannel`** | Soporte de múltiples canales por cuenta Google con tokens cifrados AES-256-GCM. |
-| **ADR-11** | **Telemetría & Costes** | **`ProviderExecution` (Registro de Inferencia Unitaria)** | Registro de latencias, HTTP status, tokens y coste exacto en euros (€). |
+| **ADR-08** | **Reanudabilidad de Jobs** | **`ProductionJob` + `JobStep` con `input_hash`** | Idempotencia y reanudación granular por hash de inputs sin reiniciar renders desde cero. |
+| **ADR-09** | **Calidad & COPPA** | **`QCReport` + `QCCheck` (Normalizado, sin Engagement)** | Validación de reglas COPPA y técnicas; estado global derivado (`approved` = 0 fallos críticos). |
+| **ADR-10** | **Ownership YouTube/OAuth** | **`GoogleOAuthAccount` ──► `YouTubeChannelConnection` ──► `YouTubeChannel`** | Canales con múltiples gestores autorizados; refresh tokens exclusivamente en backend. |
+| **ADR-11** | **Telemetría & Costes** | **`ProviderExecution` (cost_eur nullable)** | Telemetría técnica separada de contabilidad financiera; erradica tabla duplicada `cost_metrics`. |
 | **ADR-12** | **Versionado Multimedia**| **`Asset` (Lógico) + `AssetVersion` (Inmutable append-only)** | Trazabilidad exacta de hashes SHA-256 y reproducibilidad de renders. |
-| **ADR-13** | **Congelación de Render**| **`EpisodeVersion` (Snapshot Inmutable)** | Aislamiento de renderizado frente a ediciones concurrentes en la UI. |
-| **ADR-14** | **Calendario Editorial** | **Vista SQL Proyectada sobre `episodes` y `publications`** | Erradicación de duplicidades de fecha entre borrador y YouTube API. |
+| **ADR-13** | **Snapshot de Inputs**  | **`EpisodeVersion` (Reproducible Input State)** | Congelación inmutable de inputs para renderizado sin colisiones por edición concurrente en UI. |
+| **ADR-14** | **Calendario Editorial** | **`EditorialCalendarItem` (Tabla física persistente)** | Intención editorial independiente de la configuración o estado técnico de YouTube. |
 
 ---
 
-## 14. CONCLUSIÓN DE PHASE 01 & 01.1
+## 14. CONCLUSIÓN DE PHASE 01, 01.1 & 01.2
 
-El dominio de Cartoon Studio queda plenamente formalizado:
+El dominio de Cartoon Studio queda definitivamente cerrado:
 1. La jerarquía troncal es **`Series` ──► `Episode`**.
-2. El esquema relacional evoluciona a **16 tablas normalizadas en 3ª Forma Normal**, eliminando columnas polimórficas ambiguas.
-3. Se garantizan la inmutabilidad de assets generados por IA, la reanudabilidad de jobs pesados y la protección criptográfica de tokens OAuth.
+2. El esquema relacional definitivo consta de **20 tablas físicas normalizadas en 3ª Forma Normal**.
+3. Se garantizan la inmutabilidad de assets generados por IA, la reanudabilidad de jobs pesados por `input_hash`, la separación de estados editoriales vs técnicos y la protección de credenciales OAuth en backend.
 4. El sistema queda listo para proceder, tras la aprobación explícita del usuario, a la **PHASE 02 — POSTGRESQL & PERSISTENCE ENGINE**.
