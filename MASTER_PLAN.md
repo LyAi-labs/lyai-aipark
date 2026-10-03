@@ -211,6 +211,92 @@ PUBLISHED        MOCK                          Genera IDs falsos ('pub_...', 'yt
 
 ---
 
+## 2.5. DOMAIN MODEL — PHASE 01 DISCOVERY
+
+> Documentación exhaustiva complementaria: [docs/PHASE_01_DOMAIN_DESIGN.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_DOMAIN_DESIGN.md)
+
+### 2.5.1. Análisis y Resolución Semántica: `Series` vs `Project` vs `Episode`
+Tras la auditoría forense del prototipo, se determinó que la entidad `Project` en el código de Google AI Studio es un sinónimo directo de **`Episode`**. Cada proyecto modela exactamente una aventura autocontenida de 1 a 5 minutos (guion, personajes, escenas, renderizado de vídeo, metadatos y subida a YouTube).
+* **Decisión Canónica:** La jerarquía troncal es **`Series` 1 ── N `Episode`**.
+* **`Series` (Universo Narrativo / Franquicia):** Entidad permanente que define las reglas de mundo, estilo visual 3D, edad diana, idioma y personajes maestros recurrentes.
+* **`Episode` (Unidad de Producción Audiovisual):** Entidad de ejecución y renderizado que agrupa escenas, diálogos, assets y publicación. En la UI se mantiene la etiqueta *"Proyectos"* para no desorientar al usuario, pero en el dominio técnico y base de datos es formalmente `Episode`.
+
+### 2.5.2. Mapa Canónico de Entidades
+
+| Entity | Purpose | Owner | Relations | Persistent? | Current Location |
+| :--- | :--- | :--- | :--- | :---: | :--- |
+| **`User`** | Creador / propietario de las producciones. | Root | 1 ── N `Series`, 1 ── N `YouTubeChannel` | Sí | Inexistente (implicado) |
+| **`Series`** | Universo narrativo y estilo de franquicia recurrente. | `User` | 1 ── N `Episode`, 1 ── N `Character` (Maestros) | Sí | `studio.ts:32`, `models:150` |
+| **`Episode`** | Unidad narrativa y de renderizado (antes `Project`). | `Series` | 1 ── N `Scene`, 1 ── N `Job`, 1 ── 1 `QCReport`, 1 ── 1 `Publication` | Sí | `studio.ts:30`, `models:124` |
+| **`Character`** | Biblia técnica de personaje y prompts de consistencia visual. | `Series` / `Episode` | 1 ── 1 `VoiceProfile`, N ── M `Scene` | Sí | `models:23` |
+| **`CharacterVoiceProfile`** | Configuración de síntesis vocal (pitch, rate, timbre, voiceId). | `Character` | 1 ── 1 `Character` | Sí | `models:15` |
+| **`Scene`** | Bloque audiovisual unitario (visual + audio + texto). | `Episode` | 1 ── N `Asset` (imagen, voz, sfx), N ── M `Character` | Sí | `models:43` |
+| **`Asset`** | Archivo multimedia físico gestionado por `StorageProvider`. | `Episode` / `Scene` | 1 ── 1 Referencia física en storage (POSIX / S3) | Sí | `models:190` (`LibraryItem`) |
+| **`ProductionJob`** | Tarea pesada asíncrona (Render, TTS, Story Gen, YouTube Upload).| `Episode` | 1 ── N `JobAttempt` | Sí | `studio.ts:34`, `models:163` |
+| **`JobAttempt`** | Reintento registrado con trazabilidad de error. | `ProductionJob` | N ── 1 `ProductionJob` | Sí | Inexistente (nuevo) |
+| **`QCReport`** | Informe de auditoría pedagógica, coherencia y COPPA. | `Episode` | 1 ── 1 `Episode` | Sí | `models:68` |
+| **`YouTubeChannel`** | Canal de YouTube vinculado mediante OAuth 2.0. | `User` | 1 ── N `YouTubePublication`, 1 ── 1 `OAuthCredential` | Sí | `studio.ts:45`, `models:177` |
+| **`YouTubeOAuthCredential`**| Tokens de acceso y refresco cifrados (AES-256-GCM). | `YouTubeChannel`| 1 ── 1 `YouTubeChannel` | Sí | Inexistente (hardcoded demo) |
+| **`YouTubePublication`** | Publicación, visibilidad (Privada por defecto) y SEO. | `Episode` | N ── 1 `YouTubeChannel`, 1 ── 1 `Episode` | Sí | `models:84` (embebido) |
+| **`EditorialCalendarItem`** | Proyección temporal de emisión en calendario editorial. | `Episode` | 1 ── 1 `Episode` | Derivado / Sí | `studio.ts:36`, `models:203` |
+| **`CostMetric`** | Registro transaccional de consumo (€, tokens, cómputo). | `Episode` / `Job` | N ── 1 `Episode`, N ── 1 `ProductionJob` | Sí | `models:102` |
+
+### 2.5.3. Límites de Agregados (Aggregate Boundaries)
+* **`Series Aggregate`:** `Series` como raíz + Reglas narrativas + Personajes maestros de franquicia.
+* **`Episode Aggregate`:** `Episode` como raíz de consistencia + Escenas + Personajes de episodio + Informe QC.
+* **`ProductionJob Aggregate`:** `ProductionJob` como raíz + Reintentos (`JobAttempt`) + Trazas de error + Métricas de coste asociadas.
+* **`Publication Aggregate`:** `YouTubePublication` como raíz + Metadatos COPPA + Credenciales de canal + Estado en YouTube Data API.
+
+### 2.5.4. Máquinas de Estados Desacopladas
+* **`EpisodeStatus` (Editorial):** `DRAFT` ──► `SCRIPTING` ──► `STORYBOARDING` ──► `VOICE_SYNC` ──► `RENDERING` ──► `QC_REVIEW` ──► `APPROVED` ──► `ARCHIVED`
+* **`JobStatus` (Técnico / Asíncrono):** `PENDING` ──► `QUEUED` ──► `PROCESSING` ──► `COMPLETED` | `FAILED` | `CANCELLED`
+* **`PublicationStatus` (Distribución):** `NOT_CONFIGURED` ──► `METADATA_READY` ──► `SCHEDULED` ──► `UPLOADING` ──► `PUBLISHED_PRIVATE` ──► `PUBLISHED_PUBLIC` | `UPLOAD_FAILED`
+* **`SceneAssetStatus`:** `PENDING` | `GENERATING` | `READY` | `FAILED`
+
+### 2.5.5. Matriz de Responsabilidades Backend / Frontend / Worker
+* **Frontend (Angular 21 SPA):** Presentación visual, formulario reactivo de wizard, control de reproducción de medios, inspección de timeline y solicitudes de despacho a la API.
+* **Backend API (Node Express):** Control de acceso, validación Zod, orquestación de llamadas LLM (Gemini 3.8 Flash), persistencia transaccional PostgreSQL y despacho de Jobs (202 Accepted).
+* **Worker Asíncrono (`cartoon-worker`):** Ejecución de FFmpeg (renderizado MP4), llamadas de síntesis vocal (TTS), generación de miniaturas ráster 1280x720 y subidas reanudables a YouTube Data API v3.
+
+### 2.5.6. Propuesta de API REST Canónica (`/api/v1/`)
+* **Series:** `GET|POST /api/v1/series`, `GET|PATCH|DELETE /api/v1/series/:id`
+* **Episodios:** `GET|POST /api/v1/episodes`, `GET|PATCH|DELETE /api/v1/episodes/:id`
+* **Despacho de Jobs (202 Accepted):**
+  * `POST /api/v1/episodes/:id/generate-story`
+  * `POST /api/v1/episodes/:id/generate-characters`
+  * `POST /api/v1/episodes/:id/synthesize-voice`
+  * `POST /api/v1/episodes/:id/render`
+  * `POST /api/v1/episodes/:id/qc-audit`
+* **Jobs:** `GET /api/v1/jobs/:id`, `POST /api/v1/jobs/:id/cancel`
+* **YouTube:** `GET /api/v1/youtube/channels`, `POST /api/v1/youtube/oauth/start`, `GET /api/v1/youtube/oauth/callback`, `POST /api/v1/episodes/:id/publish`
+* **Costes & Métricas:** `GET /api/v1/costs/summary`, `GET /api/v1/analytics/overview`
+
+### 2.5.7. Propuesta de Routing Angular Canónico
+* `/dashboard`
+* `/series`
+* `/episodes` (Listado de producciones)
+* `/episodes/:id/story`
+* `/episodes/:id/characters`
+* `/episodes/:id/storyboard`
+* `/episodes/:id/voice`
+* `/episodes/:id/animation` (Timeline & Render)
+* `/episodes/:id/qc`
+* `/episodes/:id/thumbnail`
+* `/episodes/:id/publish`
+* `/calendar`, `/analytics`, `/library`, `/settings`
+
+### 2.5.8. Propuesta de Base de Datos Relacional (PostgreSQL / Prisma)
+13 tablas normalizadas especificadas en [docs/PHASE_01_DOMAIN_DESIGN.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_DOMAIN_DESIGN.md):
+`users`, `series`, `episodes`, `characters`, `character_voice_profiles`, `scenes`, `assets`, `production_jobs`, `job_attempts`, `qc_reports`, `youtube_channels`, `youtube_oauth_credentials`, `youtube_publications`, `cost_metrics`.
+
+### 2.5.9. Fronteras de Seguridad & Privacidad Infantil (COPPA)
+1. **Tokens OAuth encriptados:** Cifrado simétrico AES-256-GCM para tokens de YouTube en `youtube_oauth_credentials`.
+2. **COPPA Inmutable:** `madeForKids: true` forzado a nivel de base de datos y esquema.
+3. **Visibilidad Privada Obligatoria:** Publicación predeterminada en `PRIVATE` para revisión humana obligatoria en YouTube Studio.
+4. **Validación Zod estricta:** Filtrado y validación de respuestas LLM antes de persistencia.
+
+---
+
 ## 3. ARQUITECTURA OBJETIVO (Server-First / Production-Ready)
 
 ```
@@ -476,13 +562,19 @@ Durante la Phase 00 se detectó lógica de negocio crítica que actualmente resi
   * [x] Interfaz `StorageProvider` y `LocalStorageProvider` relativo.
   * [x] Interfaces de proveedores base (`AIProvider`, `TTSProvider`, `ImageProvider`, `YouTubeProvider`).
   * [x] Compilación limpia de Angular y SSR (`npm run build` exitoso).
-* **[ ] PHASE 01 — ARCHITECTURE & ROUTING REFACTORING (PENDIENTE)**
-* **[ ] PHASE 02 — POSTGRESQL & PERSISTENCE ENGINE (PENDIENTE)**
+* **[x] PHASE 01 — DOMAIN & ARCHITECTURE DISCOVERY (COMPLETADA A NIVEL DE DISEÑO)**
+  * [x] Auditoría forense del modelo de datos de Google AI Studio y resolución semántica (`Series` ──► `Episode`).
+  * [x] Mapa de entidades canónicas, cardinalidades y límites de agregados.
+  * [x] Máquinas de estados desacopladas (`EpisodeStatus`, `JobStatus`, `PublicationStatus`, `SceneAssetStatus`).
+  * [x] Especificación técnica exhaustiva generada en [docs/PHASE_01_DOMAIN_DESIGN.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_DOMAIN_DESIGN.md).
+  * [x] Propuesta de API REST (`/api/v1/`), routing canónico Angular y esquema de 13 tablas relacionales PostgreSQL/Prisma.
+  * [x] Fronteras de seguridad, protección de credenciales OAuth (AES-256-GCM) y cumplimiento inmutable COPPA.
+* **[ ] PHASE 02 — POSTGRESQL & PERSISTENCE ENGINE (PENDIENTE DE REVISIÓN Y APROBACIÓN)**
 
 ---
 
 ## 12. REGLA DE CONTINUIDAD
 1. **Rama `main` intacta** en el baseline original de Google AI Studio (`1eae2f8`).
 2. **Desarrollo activo en `Try1`** con cimientos de arquitectura Server-First.
-3. Se esperará confirmación del usuario antes de proceder con **PHASE 01**.
+3. Se esperará confirmación del usuario tras la revisión de Phase 01 antes de proceder con la implementación de **PHASE 02**.
 
