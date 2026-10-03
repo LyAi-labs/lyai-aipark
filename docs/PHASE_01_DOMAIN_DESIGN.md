@@ -557,22 +557,30 @@ Para proteger los activos y cumplir normativas internacionales:
 
 ---
 
-## 13. DECISIONES PENDIENTES (ADRs ABIERTOS PARA FASE 02)
+## 13. RESOLUCIÓN DE DECISIONES DE DISEÑO (CONSOLIDACIÓN PHASE 01.1)
 
-| ID | Asunto | Opciones en Conflicto | Recomendación Arquitectónica |
+> Documento de especificación de refinamiento: [docs/PHASE_01_1_DOMAIN_REFINEMENT.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_1_DOMAIN_REFINEMENT.md)
+
+Las decisiones inicialmente abiertas han sido zanjadas y formalizadas:
+
+| ID | Asunto | Resolución Arquitectónica Adoptada | Justificación |
 | :--- | :--- | :--- | :--- |
-| **ADR-06** | **Persistencia de Personajes: ¿Serie vs Episodio?** | A) Personajes pertenecen exclusivamente a la Serie.<br>B) Personajes pertenecen al Episodio.<br>C) Modelo híbrido (Catálogo maestro en Serie + Instancia local en Episodio). | **C (Híbrido):** Los personajes principales (Milo, Tula) residen en `Series` para continuidad; los episodios pueden instanciarlos o añadir personajes episódicos secundarios. |
-| **ADR-07** | **Estrategia de Ordenación de Escenas** | A) Array de posiciones en columna JSONB.<br>B) Columna entera `scene_index` con constraint única compuesta `(episode_id, scene_index)`. | **B (Entero secuencial):** Permite consultas ordenadas deterministas `ORDER BY scene_index ASC` y garantiza integridad referencial en PostgreSQL. |
-| **ADR-08** | **Modelo de Reintentos de Jobs** | A) Reintentos automáticos inline en el worker.<br>B) Reintentos con backoff exponencial registrados en tabla `JobAttempt`. | **B (Backoff con `JobAttempt`):** Trazabilidad forense de cada fallo de API o proceso FFmpeg sin saturar cuotas. |
-| **ADR-09** | **Granularidad de Contabilidad de Costes** | A) Resumen numérico en el episodio.<br>B) Registro transaccional por llamada en tabla `cost_metrics`. | **B (Transaccional):** Cumple con el requisito de auditoría financiera estricta en euros (€). |
-| **ADR-10** | **Ciclo de Vida de Assets Temporales** | A) Conservar todos los frames intermedios.<br>B) Purgado automático de clips de audio y frames temporales tras el render final de FFmpeg. | **B (Purga tras render):** Conservar únicamente los audios por escena y el `.mp4` final para economizar storage. |
+| **ADR-06** | **Personajes** | **`CharacterDefinition` (Series) + `EpisodeCharacter` (Episode)** | Separación de biblia maestra inmutable y variaciones de vestuario/acting por capítulo. |
+| **ADR-07** | **Orden de Escenas** | **`scene_index INT` con `UNIQUE(episode_id, scene_index)`** | Orden determinista indexado por B-Tree con reordenación transaccional atómica. |
+| **ADR-08** | **Reanudabilidad de Jobs** | **`ProductionJob` + `JobStep` (Subtareas atómicas)** | Idempotencia y reanudación granular sin reiniciar renders desde cero. |
+| **ADR-09** | **Calidad & COPPA** | **`QCReport` + `QCCheck` (Normalizado)** | Validación individual de reglas COPPA y calidad auditables vía SQL. |
+| **ADR-10** | **Ownership OAuth** | **`GoogleOAuthAccount` (User) ──► `YouTubeChannel`** | Soporte de múltiples canales por cuenta Google con tokens cifrados AES-256-GCM. |
+| **ADR-11** | **Telemetría & Costes** | **`ProviderExecution` (Registro de Inferencia Unitaria)** | Registro de latencias, HTTP status, tokens y coste exacto en euros (€). |
+| **ADR-12** | **Versionado Multimedia**| **`Asset` (Lógico) + `AssetVersion` (Inmutable append-only)** | Trazabilidad exacta de hashes SHA-256 y reproducibilidad de renders. |
+| **ADR-13** | **Congelación de Render**| **`EpisodeVersion` (Snapshot Inmutable)** | Aislamiento de renderizado frente a ediciones concurrentes en la UI. |
+| **ADR-14** | **Calendario Editorial** | **Vista SQL Proyectada sobre `episodes` y `publications`** | Erradicación de duplicidades de fecha entre borrador y YouTube API. |
 
 ---
 
-## 14. CONCLUSIÓN DE PHASE 01
+## 14. CONCLUSIÓN DE PHASE 01 & 01.1
 
-El dominio de Cartoon Studio ha sido auditado y formalizado exhaustivamente:
-1. La entidad raíz de producción es **`Episode`**, agrupada bajo **`Series`**.
-2. Los agregados delimitan claramente el guion, la producción técnica asíncrona y la publicación en YouTube.
-3. El esquema relacional cuenta con 13 tablas normalizadas listas para ser implementadas mediante Prisma en la Fase 02.
-4. Queda garantizada la compatibilidad con la interfaz de usuario existente sin introducir regresiones.
+El dominio de Cartoon Studio queda plenamente formalizado:
+1. La jerarquía troncal es **`Series` ──► `Episode`**.
+2. El esquema relacional evoluciona a **16 tablas normalizadas en 3ª Forma Normal**, eliminando columnas polimórficas ambiguas.
+3. Se garantizan la inmutabilidad de assets generados por IA, la reanudabilidad de jobs pesados y la protección criptográfica de tokens OAuth.
+4. El sistema queda listo para proceder, tras la aprobación explícita del usuario, a la **PHASE 02 — POSTGRESQL & PERSISTENCE ENGINE**.

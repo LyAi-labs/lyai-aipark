@@ -286,14 +286,27 @@ Tras la auditoría forense del prototipo, se determinó que la entidad `Project`
 * `/calendar`, `/analytics`, `/library`, `/settings`
 
 ### 2.5.8. Propuesta de Base de Datos Relacional (PostgreSQL / Prisma)
-13 tablas normalizadas especificadas en [docs/PHASE_01_DOMAIN_DESIGN.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_DOMAIN_DESIGN.md):
-`users`, `series`, `episodes`, `characters`, `character_voice_profiles`, `scenes`, `assets`, `production_jobs`, `job_attempts`, `qc_reports`, `youtube_channels`, `youtube_oauth_credentials`, `youtube_publications`, `cost_metrics`.
+Esquema de **16 tablas normalizadas** (refinado en Phase 01.1):
+`users`, `series`, `episodes`, `character_definitions`, `episode_characters`, `character_voice_profiles`, `scenes`, `assets`, `asset_versions`, `episode_versions`, `production_jobs`, `job_steps`, `provider_executions`, `qc_reports`, `qc_checks`, `google_oauth_accounts`, `youtube_channels`, `youtube_publications`.
 
 ### 2.5.9. Fronteras de Seguridad & Privacidad Infantil (COPPA)
-1. **Tokens OAuth encriptados:** Cifrado simétrico AES-256-GCM para tokens de YouTube en `youtube_oauth_credentials`.
+1. **Tokens OAuth encriptados:** Cifrado simétrico AES-256-GCM para tokens de Google/YouTube en `google_oauth_accounts`.
 2. **COPPA Inmutable:** `madeForKids: true` forzado a nivel de base de datos y esquema.
 3. **Visibilidad Privada Obligatoria:** Publicación predeterminada en `PRIVATE` para revisión humana obligatoria en YouTube Studio.
 4. **Validación Zod estricta:** Filtrado y validación de respuestas LLM antes de persistencia.
+
+### 2.5.10. Refinamiento Canónico del Dominio (Phase 01.1)
+> Documento exhaustivo: [docs/PHASE_01_1_DOMAIN_REFINEMENT.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_1_DOMAIN_REFINEMENT.md)
+1. **Personajes:** `CharacterDefinition` (Biblia de franquicia inmutable) ──► `EpisodeCharacter` (Instancia con overrides de vestuario/acting por capítulo).
+2. **Multimedia Inmutable:** `Asset` (Identidad lógica) ──► `AssetVersion` (Archivos inmutables versionados con hash SHA-256).
+3. **Subtareas Atómicas:** `ProductionJob` ──► `JobStep` (Subtareas con duración y reanudabilidad idempotente tras fallo).
+4. **Calidad Normalizada:** `QCReport` ──► `QCCheck` (Evaluaciones atómicas por regla COPPA/Calidad indexables por SQL).
+5. **Ownership OAuth 2.0:** `User ──► GoogleOAuthAccount ──► YouTubeChannel` (Soporte multicanal por cuenta Google con tokens cifrados).
+6. **Telemetría Exacta:** `ProviderExecution` (Registro de cada inferencia con latencia, HTTP status, tokens y coste exacto en €).
+7. **Desacoplamiento Total de Estados:** `EpisodeStatus` (Editorial) vs `JobStatus` (Técnico Worker) vs `PublicationStatus` (YouTube).
+8. **Congelación Determinista:** `EpisodeVersion` (Snapshot inmutable consumido por el render FFmpeg para evitar colisiones por edición en UI).
+9. **Calendario Editorial:** Proyección virtual (Query/View SQL sobre `episodes` y `youtube_publications`), erradicando duplicidades.
+10. **Esquema Prisma Definitivo:** 16 tablas en 3ª Forma Normal listas para migración en Phase 02.
 
 ---
 
@@ -566,9 +579,18 @@ Durante la Phase 00 se detectó lógica de negocio crítica que actualmente resi
   * [x] Auditoría forense del modelo de datos de Google AI Studio y resolución semántica (`Series` ──► `Episode`).
   * [x] Mapa de entidades canónicas, cardinalidades y límites de agregados.
   * [x] Máquinas de estados desacopladas (`EpisodeStatus`, `JobStatus`, `PublicationStatus`, `SceneAssetStatus`).
-  * [x] Especificación técnica exhaustiva generada en [docs/PHASE_01_DOMAIN_DESIGN.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_DOMAIN_DESIGN.md).
-  * [x] Propuesta de API REST (`/api/v1/`), routing canónico Angular y esquema de 13 tablas relacionales PostgreSQL/Prisma.
-  * [x] Fronteras de seguridad, protección de credenciales OAuth (AES-256-GCM) y cumplimiento inmutable COPPA.
+  * [x] Especificación técnica base en [docs/PHASE_01_DOMAIN_DESIGN.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_DOMAIN_DESIGN.md).
+* **[x] PHASE 01.1 — DOMAIN MODEL REFINEMENT (COMPLETADA A NIVEL DE DISEÑO)**
+  * [x] Refinamiento de 10 puntos de diseño en [docs/PHASE_01_1_DOMAIN_REFINEMENT.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_01_1_DOMAIN_REFINEMENT.md).
+  * [x] Desacoplamiento de `CharacterDefinition` y `EpisodeCharacter`.
+  * [x] Versionado inmutable de assets (`Asset` ──► `AssetVersion` con hash SHA-256).
+  * [x] Desglose de tareas pesadas en subtareas atómicas reanudables (`JobStep`).
+  * [x] Auditoría de calidad y COPPA normalizada por reglas (`QCCheck`).
+  * [x] Modelo OAuth centrado en cuenta Google (`GoogleOAuthAccount` ──► `YouTubeChannel`).
+  * [x] Telemetría exacta de inferencia y costes unitarios (`ProviderExecution`).
+  * [x] Snapshots inmutables de producción (`EpisodeVersion`) para render determinista.
+  * [x] Calendario editorial proyectado como vista SQL unificada.
+  * [x] Esquema relacional definitivo ampliado a 16 tablas en 3ª Forma Normal para Prisma/PostgreSQL.
 * **[ ] PHASE 02 — POSTGRESQL & PERSISTENCE ENGINE (PENDIENTE DE REVISIÓN Y APROBACIÓN)**
 
 ---
@@ -576,5 +598,5 @@ Durante la Phase 00 se detectó lógica de negocio crítica que actualmente resi
 ## 12. REGLA DE CONTINUIDAD
 1. **Rama `main` intacta** en el baseline original de Google AI Studio (`1eae2f8`).
 2. **Desarrollo activo en `Try1`** con cimientos de arquitectura Server-First.
-3. Se esperará confirmación del usuario tras la revisión de Phase 01 antes de proceder con la implementación de **PHASE 02**.
+3. Se esperará confirmación del usuario tras la revisión de Phase 01.1 antes de proceder con la implementación de **PHASE 02**.
 
