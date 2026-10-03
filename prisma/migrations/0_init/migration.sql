@@ -413,6 +413,9 @@ CREATE UNIQUE INDEX "character_voice_profiles_character_definition_id_language_p
 CREATE INDEX "idx_episodes_series_status" ON "episodes"("series_id", "status");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "episodes_id_series_id_key" ON "episodes"("id", "series_id");
+
+-- CreateIndex
 CREATE INDEX "idx_episode_characters_episode_id" ON "episode_characters"("episode_id");
 
 -- CreateIndex
@@ -437,10 +440,16 @@ CREATE INDEX "idx_episode_versions_episode_id" ON "episode_versions"("episode_id
 CREATE UNIQUE INDEX "episode_versions_episode_id_version_number_key" ON "episode_versions"("episode_id", "version_number");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "episode_versions_id_episode_id_key" ON "episode_versions"("id", "episode_id");
+
+-- CreateIndex
 CREATE INDEX "idx_production_jobs_status_created" ON "production_jobs"("status", "created_at");
 
 -- CreateIndex
 CREATE INDEX "idx_production_jobs_episode_id" ON "production_jobs"("episode_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "production_jobs_id_episode_id_key" ON "production_jobs"("id", "episode_id");
 
 -- CreateIndex
 CREATE INDEX "idx_job_steps_job_status" ON "job_steps"("job_id", "status");
@@ -533,13 +542,13 @@ ALTER TABLE "episode_versions" ADD CONSTRAINT "episode_versions_episode_id_fkey"
 ALTER TABLE "production_jobs" ADD CONSTRAINT "production_jobs_episode_id_fkey" FOREIGN KEY ("episode_id") REFERENCES "episodes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "production_jobs" ADD CONSTRAINT "production_jobs_episode_version_id_fkey" FOREIGN KEY ("episode_version_id") REFERENCES "episode_versions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "production_jobs" ADD CONSTRAINT "production_jobs_episode_version_id_episode_id_fkey" FOREIGN KEY ("episode_version_id", "episode_id") REFERENCES "episode_versions"("id", "episode_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "job_steps" ADD CONSTRAINT "job_steps_job_id_fkey" FOREIGN KEY ("job_id") REFERENCES "production_jobs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "provider_executions" ADD CONSTRAINT "provider_executions_job_id_fkey" FOREIGN KEY ("job_id") REFERENCES "production_jobs"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "provider_executions" ADD CONSTRAINT "provider_executions_job_id_episode_id_fkey" FOREIGN KEY ("job_id", "episode_id") REFERENCES "production_jobs"("id", "episode_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "provider_executions" ADD CONSTRAINT "provider_executions_episode_id_fkey" FOREIGN KEY ("episode_id") REFERENCES "episodes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -548,7 +557,7 @@ ALTER TABLE "provider_executions" ADD CONSTRAINT "provider_executions_episode_id
 ALTER TABLE "qc_reports" ADD CONSTRAINT "qc_reports_episode_id_fkey" FOREIGN KEY ("episode_id") REFERENCES "episodes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "qc_reports" ADD CONSTRAINT "qc_reports_episode_version_id_fkey" FOREIGN KEY ("episode_version_id") REFERENCES "episode_versions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "qc_reports" ADD CONSTRAINT "qc_reports_episode_version_id_episode_id_fkey" FOREIGN KEY ("episode_version_id", "episode_id") REFERENCES "episode_versions"("id", "episode_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "qc_checks" ADD CONSTRAINT "qc_checks_report_id_fkey" FOREIGN KEY ("report_id") REFERENCES "qc_reports"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -557,7 +566,7 @@ ALTER TABLE "qc_checks" ADD CONSTRAINT "qc_checks_report_id_fkey" FOREIGN KEY ("
 ALTER TABLE "editorial_calendar_items" ADD CONSTRAINT "editorial_calendar_items_series_id_fkey" FOREIGN KEY ("series_id") REFERENCES "series"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "editorial_calendar_items" ADD CONSTRAINT "editorial_calendar_items_episode_id_fkey" FOREIGN KEY ("episode_id") REFERENCES "episodes"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "editorial_calendar_items" ADD CONSTRAINT "editorial_calendar_items_episode_id_series_id_fkey" FOREIGN KEY ("episode_id", "series_id") REFERENCES "episodes"("id", "series_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "editorial_calendar_items" ADD CONSTRAINT "editorial_calendar_items_youtube_publication_id_fkey" FOREIGN KEY ("youtube_publication_id") REFERENCES "youtube_publications"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -575,7 +584,7 @@ ALTER TABLE "youtube_channel_connections" ADD CONSTRAINT "youtube_channel_connec
 ALTER TABLE "youtube_publications" ADD CONSTRAINT "youtube_publications_episode_id_fkey" FOREIGN KEY ("episode_id") REFERENCES "episodes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "youtube_publications" ADD CONSTRAINT "youtube_publications_episode_version_id_fkey" FOREIGN KEY ("episode_version_id") REFERENCES "episode_versions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "youtube_publications" ADD CONSTRAINT "youtube_publications_episode_version_id_episode_id_fkey" FOREIGN KEY ("episode_version_id", "episode_id") REFERENCES "episode_versions"("id", "episode_id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "youtube_publications" ADD CONSTRAINT "youtube_publications_youtube_channel_id_fkey" FOREIGN KEY ("youtube_channel_id") REFERENCES "youtube_channels"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

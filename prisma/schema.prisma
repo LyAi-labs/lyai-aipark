@@ -256,6 +256,7 @@ model Episode {
   calendarItems       EditorialCalendarItem[]
   youtubePublications YouTubePublication[]
 
+  @@unique([id, seriesId], name: "uq_episode_id_series_id")
   @@index([seriesId, status], name: "idx_episodes_series_status")
   @@map("episodes")
 }
@@ -380,6 +381,7 @@ model EpisodeVersion {
   publications   YouTubePublication[]
 
   @@unique([episodeId, versionNumber], name: "uq_episode_version_number")
+  @@unique([id, episodeId], name: "uq_episode_version_id_episode_id")
   @@index([episodeId], name: "idx_episode_versions_episode_id")
   @@map("episode_versions")
 }
@@ -405,11 +407,12 @@ model ProductionJob {
 
   // Relations
   episode            Episode             @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  episodeVersion     EpisodeVersion?     @relation(fields: [episodeVersionId], references: [id], onDelete: SetNull)
+  episodeVersion     EpisodeVersion?     @relation(fields: [episodeVersionId, episodeId], references: [id, episodeId], onDelete: Cascade)
   steps              JobStep[]
   assetVersions      AssetVersion[]
   providerExecutions ProviderExecution[]
 
+  @@unique([id, episodeId], name: "uq_production_job_id_episode_id")
   @@index([status, createdAt], name: "idx_production_jobs_status_created")
   @@index([episodeId], name: "idx_production_jobs_episode_id")
   @@map("production_jobs")
@@ -468,7 +471,7 @@ model ProviderExecution {
   createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
   // Relations
-  job     ProductionJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  job     ProductionJob? @relation(fields: [jobId, episodeId], references: [id, episodeId], onDelete: Cascade)
   episode Episode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
   @@index([episodeId, createdAt], name: "idx_provider_executions_episode")
@@ -494,7 +497,7 @@ model QCReport {
 
   // Relations
   episode        Episode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  episodeVersion EpisodeVersion @relation(fields: [episodeVersionId], references: [id], onDelete: Cascade)
+  episodeVersion EpisodeVersion @relation(fields: [episodeVersionId, episodeId], references: [id, episodeId], onDelete: Cascade)
   checks         QCCheck[]
 
   @@index([episodeVersionId], name: "idx_qc_reports_version_id")
@@ -545,7 +548,7 @@ model EditorialCalendarItem {
 
   // Relations
   series             Series              @relation(fields: [seriesId], references: [id], onDelete: Cascade)
-  episode            Episode?            @relation(fields: [episodeId], references: [id], onDelete: SetNull)
+  episode            Episode?            @relation(fields: [episodeId, seriesId], references: [id, seriesId], onDelete: Cascade)
   youtubePublication YouTubePublication? @relation(fields: [youtubePublicationId], references: [id], onDelete: SetNull)
 
   @@index([seriesId, plannedAt], name: "idx_calendar_series_planned")
@@ -658,7 +661,7 @@ model YouTubePublication {
 
   // Relations
   episode          Episode                 @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  episodeVersion   EpisodeVersion?         @relation(fields: [episodeVersionId], references: [id], onDelete: SetNull)
+  episodeVersion   EpisodeVersion?         @relation(fields: [episodeVersionId, episodeId], references: [id, episodeId], onDelete: Cascade)
   youtubeChannel   YouTubeChannel          @relation(fields: [youtubeChannelId], references: [id], onDelete: Restrict)
   calendarItemsRef EditorialCalendarItem[]
 
