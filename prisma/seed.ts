@@ -54,15 +54,18 @@ async function main() {
       visualConsistencyPrompt: 'Cute original 3D cartoon fox, orange fur, cream muzzle, large expressive eyes, green backpack, rounded proportions, friendly facial expression, 3D animated film render.',
       masterPrompt: 'Consistent character render: Milo the fox, full body 3/4 angle, soft studio rim lighting, vivid stylized textures, 8k resolution cartoon character asset.',
       tagline: 'El pequeño explorador de grandes ideas',
-      voiceProfile: {
-        create: {
-          provider: 'google-cloud-tts',
-          voiceId: 'es-ES-Neural2-F',
-          pitch: 1.05,
-          speed: 0.95,
-          timbre: 'Cálido, infantil y alegre',
-          language: 'es-ES',
-        },
+      voiceProfiles: {
+        create: [
+          {
+            provider: 'google-cloud-tts',
+            voiceId: 'es-ES-Neural2-F',
+            pitch: 1.05,
+            speed: 0.95,
+            timbre: 'Cálido, infantil y alegre',
+            language: 'es-ES',
+            isDefault: true,
+          },
+        ],
       },
     },
   });

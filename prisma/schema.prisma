@@ -159,9 +159,10 @@ model Series {
   updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                 User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   episodes             Episode[]
   characterDefinitions CharacterDefinition[]
+  calendarItems        EditorialCalendarItem[]
 
   @@index([userId], name: "idx_series_user_id")
   @@map("series")
@@ -189,8 +190,8 @@ model CharacterDefinition {
   updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  series            Series                 @relation(fields: [seriesId], references: [id], onDelete: Cascade)
-  voiceProfile      CharacterVoiceProfile?
+  series            Series                  @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  voiceProfiles     CharacterVoiceProfile[]
   episodeCharacters EpisodeCharacter[]
 
   @@index([seriesId], name: "idx_character_definitions_series_id")
@@ -198,24 +199,27 @@ model CharacterDefinition {
 }
 
 // ------------------------------------------------------------------------------
-// 4. CHARACTER VOICE PROFILE
+// 4. CHARACTER VOICE PROFILE (1:N ARCHETYPE VOICES & LOCALIZATION)
 // ------------------------------------------------------------------------------
 
 model CharacterVoiceProfile {
   id                    String   @id @default(uuid()) @db.Uuid
-  characterDefinitionId String   @unique @map("character_definition_id") @db.Uuid
+  characterDefinitionId String   @map("character_definition_id") @db.Uuid
   provider              String   @default("google-cloud-tts") @db.VarChar(50)
   voiceId               String   @map("voice_id") @db.VarChar(100)
   pitch                 Decimal  @default(1.00) @db.Decimal(4, 2)
   speed                 Decimal  @default(1.00) @db.Decimal(4, 2)
   timbre                String?  @db.VarChar(100)
   language              String   @default("es-ES") @db.VarChar(50)
+  isDefault             Boolean  @default(false) @map("is_default")
   createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
   characterDefinition CharacterDefinition @relation(fields: [characterDefinitionId], references: [id], onDelete: Cascade)
 
+  @@unique([characterDefinitionId, language, provider, voiceId], name: "uq_character_voice_lang_provider")
+  @@index([characterDefinitionId], name: "idx_character_voice_profiles_char_id")
   @@map("character_voice_profiles")
 }
 
@@ -241,16 +245,16 @@ model Episode {
   updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  series             Series                 @relation(fields: [seriesId], references: [id], onDelete: Restrict)
-  episodeCharacters  EpisodeCharacter[]
-  scenes             Scene[]
-  assets             Asset[]
-  episodeVersions    EpisodeVersion[]
-  productionJobs     ProductionJob[]
-  providerExecutions ProviderExecution[]
-  qcReport           QCReport?
-  editorialCalendar  EditorialCalendarItem?
-  youtubePublication YouTubePublication?
+  series              Series                  @relation(fields: [seriesId], references: [id], onDelete: Restrict)
+  episodeCharacters   EpisodeCharacter[]
+  scenes              Scene[]
+  assets              Asset[]
+  episodeVersions     EpisodeVersion[]
+  productionJobs      ProductionJob[]
+  providerExecutions  ProviderExecution[]
+  qcReports           QCReport[]
+  calendarItems       EditorialCalendarItem[]
+  youtubePublications YouTubePublication[]
 
   @@index([seriesId, status], name: "idx_episodes_series_status")
   @@map("episodes")
@@ -370,8 +374,10 @@ model EpisodeVersion {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   // Relations
-  episode        Episode         @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  episode        Episode              @relation(fields: [episodeId], references: [id], onDelete: Cascade)
   productionJobs ProductionJob[]
+  qcReports      QCReport[]
+  publications   YouTubePublication[]
 
   @@unique([episodeId, versionNumber], name: "uq_episode_version_number")
   @@index([episodeId], name: "idx_episode_versions_episode_id")
@@ -447,7 +453,7 @@ model JobStep {
 model ProviderExecution {
   id                String       @id @default(uuid()) @db.Uuid
   jobId             String?      @map("job_id") @db.Uuid
-  episodeId         String?      @map("episode_id") @db.Uuid
+  episodeId         String       @map("episode_id") @db.Uuid
   provider          ProviderType
   modelOrService    String       @map("model_or_service") @db.VarChar(100)
   operation         String       @db.VarChar(100)
@@ -463,7 +469,7 @@ model ProviderExecution {
 
   // Relations
   job     ProductionJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  episode Episode?       @relation(fields: [episodeId], references: [id], onDelete: SetNull)
+  episode Episode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
 
   @@index([episodeId, createdAt], name: "idx_provider_executions_episode")
   @@index([provider, createdAt], name: "idx_provider_executions_provider")
@@ -476,7 +482,8 @@ model ProviderExecution {
 
 model QCReport {
   id                    String   @id @default(uuid()) @db.Uuid
-  episodeId             String   @unique @map("episode_id") @db.Uuid
+  episodeId             String   @map("episode_id") @db.Uuid
+  episodeVersionId      String   @map("episode_version_id") @db.Uuid
   overallScore          Int      @map("overall_score")
   approvedForProduction Boolean  @default(false) @map("approved_for_production")
   auditorType           String   @default("AI_ENGINE") @map("auditor_type") @db.VarChar(50)
@@ -486,9 +493,12 @@ model QCReport {
   updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  episode Episode   @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  checks  QCCheck[]
+  episode        Episode        @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  episodeVersion EpisodeVersion @relation(fields: [episodeVersionId], references: [id], onDelete: Cascade)
+  checks         QCCheck[]
 
+  @@index([episodeVersionId], name: "idx_qc_reports_version_id")
+  @@index([episodeId], name: "idx_qc_reports_episode_id")
   @@map("qc_reports")
 }
 
@@ -522,7 +532,9 @@ model QCCheck {
 
 model EditorialCalendarItem {
   id                   String          @id @default(uuid()) @db.Uuid
-  episodeId            String          @unique @map("episode_id") @db.Uuid
+  seriesId             String          @map("series_id") @db.Uuid
+  title                String          @db.VarChar(255)
+  episodeId            String?         @map("episode_id") @db.Uuid
   plannedAt            DateTime        @map("planned_at") @db.Timestamptz(6)
   timezone             String          @default("UTC") @db.VarChar(50)
   editorialStatus      EditorialStatus @default(DRAFT_SCHEDULE) @map("editorial_status")
@@ -532,10 +544,13 @@ model EditorialCalendarItem {
   updatedAt            DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  episode            Episode             @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  series             Series              @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  episode            Episode?            @relation(fields: [episodeId], references: [id], onDelete: SetNull)
   youtubePublication YouTubePublication? @relation(fields: [youtubePublicationId], references: [id], onDelete: SetNull)
 
+  @@index([seriesId, plannedAt], name: "idx_calendar_series_planned")
   @@index([plannedAt, editorialStatus], name: "idx_calendar_planned_status")
+  @@index([episodeId], name: "idx_calendar_episode_id")
   @@map("editorial_calendar_items")
 }
 
@@ -620,31 +635,34 @@ model YouTubeChannelConnection {
 // ------------------------------------------------------------------------------
 
 model YouTubePublication {
-  id                       String        @id @default(uuid()) @db.Uuid
-  episodeId                String        @unique @map("episode_id") @db.Uuid
-  youtubeChannelId         String        @map("youtube_channel_id") @db.Uuid
-  title                    String        @db.VarChar(100)
-  description              String        @db.Text
-  tags                     Json          @default("[]")
-  hashtags                 Json          @default("[]")
-  madeForKids              Boolean       @default(true) @map("made_for_kids") // COPPA mandatory
-  privacyStatus            PrivacyStatus @default(PRIVATE) @map("privacy_status")
-  categoryId               String        @default("1") @map("category_id") @db.VarChar(20) // Film & Animation
-  thumbnailOverlayText     String?       @map("thumbnail_overlay_text") @db.VarChar(100)
-  recommendedPlaylist      String?       @map("recommended_playlist") @db.VarChar(255)
-  coppaComplianceConfirmed Boolean       @default(true) @map("coppa_compliance_confirmed")
-  scheduledAt              DateTime?     @map("scheduled_at") @db.Timestamptz(6)
-  publishedVideoId         String?       @map("published_video_id") @db.VarChar(100)
-  publishedVideoUrl        String?       @map("published_video_url") @db.Text
-  publishedAt              DateTime?     @map("published_at") @db.Timestamptz(6)
-  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt                DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                       String          @id @default(uuid()) @db.Uuid
+  episodeId                String          @map("episode_id") @db.Uuid
+  episodeVersionId         String?         @map("episode_version_id") @db.Uuid
+  youtubeChannelId         String          @map("youtube_channel_id") @db.Uuid
+  title                    String          @db.VarChar(100)
+  description              String          @db.Text
+  tags                     Json            @default("[]")
+  hashtags                 Json            @default("[]")
+  madeForKids              Boolean         @default(true) @map("made_for_kids") // COPPA mandatory
+  privacyStatus            PrivacyStatus   @default(PRIVATE) @map("privacy_status")
+  categoryId               String          @default("1") @map("category_id") @db.VarChar(20) // Film & Animation
+  thumbnailOverlayText     String?         @map("thumbnail_overlay_text") @db.VarChar(100)
+  recommendedPlaylist      String?         @map("recommended_playlist") @db.VarChar(255)
+  coppaComplianceConfirmed Boolean         @default(true) @map("coppa_compliance_confirmed")
+  scheduledAt              DateTime?       @map("scheduled_at") @db.Timestamptz(6)
+  publishedVideoId         String?         @map("published_video_id") @db.VarChar(100)
+  publishedVideoUrl        String?         @map("published_video_url") @db.Text
+  publishedAt              DateTime?       @map("published_at") @db.Timestamptz(6)
+  createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
-  episode           Episode                 @relation(fields: [episodeId], references: [id], onDelete: Cascade)
-  youtubeChannel    YouTubeChannel          @relation(fields: [youtubeChannelId], references: [id], onDelete: Restrict)
-  calendarItemsRef  EditorialCalendarItem[]
+  episode          Episode                 @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  episodeVersion   EpisodeVersion?         @relation(fields: [episodeVersionId], references: [id], onDelete: SetNull)
+  youtubeChannel   YouTubeChannel          @relation(fields: [youtubeChannelId], references: [id], onDelete: Restrict)
+  calendarItemsRef EditorialCalendarItem[]
 
+  @@index([episodeId], name: "idx_youtube_publications_episode_id")
   @@index([youtubeChannelId, privacyStatus], name: "idx_youtube_publications_channel_status")
   @@map("youtube_publications")
 }
