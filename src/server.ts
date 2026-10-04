@@ -5,6 +5,7 @@ import {
   writeResponseToNodeResponse,
 } from '@angular/ssr/node';
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import { join } from 'node:path';
 import { GoogleGenAI } from '@google/genai';
 
@@ -12,6 +13,7 @@ import { config } from './server/config';
 import { logger } from './server/utils/logger';
 import { errorHandler } from './server/errors';
 import { db } from './server/db';
+import { authRouter, requireAuth } from './server/auth';
 import {
   DEMO_ONLY_YOUTUBE_CHANNEL,
   DEMO_ONLY_FALLBACK_STORY,
@@ -22,13 +24,19 @@ const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
 app.use(express.json({ limit: '30mb' }));
+app.use(cookieParser());
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Auth routes — public (no requireAuth here)
+// ──────────────────────────────────────────────────────────────────────────────
+app.use('/api/auth', authRouter);
 
 // Serve local asset storage if running with local driver
 app.use('/api/assets', express.static(config.storage.localPath));
 
-/**
- * REST API: Database Healthcheck & Diagnostics
- */
+// ──────────────────────────────────────────────────────────────────────────────
+// Health endpoint — public (monitoring, load-balancer probes)
+// ──────────────────────────────────────────────────────────────────────────────
 app.get('/api/health/db', async (_req, res) => {
   try {
     await db.$queryRaw`SELECT 1`;
@@ -60,6 +68,13 @@ const EUR_PER_1M_INPUT_TOKENS = 0.09;
 const EUR_PER_1M_OUTPUT_TOKENS = 0.35;
 const EUR_PER_IMAGE = 0.025;
 const EUR_PER_TTS_1K_CHARS = 0.015;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Phase 03 — Global Auth Guard
+// All /api/* routes registered BELOW this point require a valid JWT.
+// Routes mounted ABOVE (/api/auth/*, /api/health/*, /api/assets/*) are public.
+// ──────────────────────────────────────────────────────────────────────────────
+app.use('/api', requireAuth);
 
 /**
  * REST API: Story Generation

@@ -1,5 +1,5 @@
 // ==============================================================================
-// CARTOON STUDIO — CANONICAL RELATIONAL SCHEMA (PHASE 02)
+// CARTOON STUDIO — CANONICAL RELATIONAL SCHEMA (PHASE 02 + PHASE 03 AUTH)
 // Database Engine: PostgreSQL 16
 // ORM: Prisma 6.4.1
 // Architecture: Server-First, Highly Normalized (3NF), Invariant Enforced
@@ -127,17 +127,47 @@ enum PrivacyStatus {
 // ------------------------------------------------------------------------------
 
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
-  email     String   @unique @db.VarChar(255)
-  name      String   @db.VarChar(255)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique @db.VarChar(255)
+  name         String   @db.VarChar(255)
+  /// Argon2id hash of the user's password. Null until user sets a password.
+  passwordHash String?  @map("password_hash") @db.VarChar(512)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   // Relations
   series              Series[]
   googleOAuthAccounts GoogleOAuthAccount[]
+  refreshTokens       UserRefreshToken[]
 
   @@map("users")
+}
+
+// ------------------------------------------------------------------------------
+// 1b. REFRESH TOKEN STORE (Phase 03 — Auth)
+// Stores hashed refresh tokens for rotation and reuse detection.
+// Only the SHA-256 hash of the raw token is persisted — raw token lives only
+// in the HttpOnly cookie. familyId enables full-family invalidation on reuse.
+// ------------------------------------------------------------------------------
+
+model UserRefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  /// Opaque family identifier. All rotations share the same familyId.
+  /// Entire family is invalidated when reuse is detected.
+  familyId  String   @map("family_id") @db.Uuid
+  /// SHA-256 hex digest of the raw refresh token string.
+  tokenHash String   @unique @map("token_hash") @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// Absolute expiry — worker can prune expired rows.
+  expiresAt DateTime @default(dbgenerated("NOW() + INTERVAL '30 days'")) @map("expires_at") @db.Timestamptz(6)
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], name: "idx_user_refresh_tokens_user_id")
+  @@index([familyId], name: "idx_user_refresh_tokens_family_id")
+  @@map("user_refresh_tokens")
 }
 
 // ------------------------------------------------------------------------------

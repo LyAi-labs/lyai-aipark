@@ -40,12 +40,22 @@ export interface GoogleOAuthConfig {
   isConfigured: boolean;
 }
 
+export interface AuthConfig {
+  /** HS256 signing secret for JWT access and refresh tokens. Min 32 chars. */
+  jwtSecret: string;
+  /** Cookie signing secret for cookie-parser (defence-in-depth). Min 32 chars. */
+  sessionSecret: string;
+  /** True when both secrets are set and long enough for production use. */
+  isConfigured: boolean;
+}
+
 export interface ServerConfig {
   app: AppConfig;
   database: DatabaseConfig;
   ai: AiConfig;
   storage: StorageConfig;
   googleOAuth: GoogleOAuthConfig;
+  auth: AuthConfig;
 }
 
 function parsePort(val: string | undefined, defaultPort = 4000): number {
@@ -91,6 +101,13 @@ export function loadConfig(): ServerConfig {
       clientSecret,
       redirectUri: process.env['GOOGLE_REDIRECT_URI'] || 'http://localhost:4000/api/auth/google/callback',
       isConfigured: Boolean(clientId && clientSecret),
+    },
+    auth: {
+      jwtSecret: process.env['JWT_SECRET'] || '',
+      sessionSecret: process.env['SESSION_SECRET'] || '',
+      isConfigured:
+        Boolean(process.env['JWT_SECRET'] && process.env['JWT_SECRET'].length >= 32) &&
+        Boolean(process.env['SESSION_SECRET'] && process.env['SESSION_SECRET'].length >= 32),
     },
   };
 }
