@@ -16,11 +16,12 @@ import argon2 from 'argon2';
 // We use m=65536 KiB (64 MB), t=3, p=4 — adequate for single-tenant studio.
 // ---------------------------------------------------------------------------
 
-const ARGON2_OPTIONS: argon2.Options & { raw?: false } = {
+const ARGON2_OPTIONS: argon2.HashOptions & { raw?: false } = {
   type: argon2.argon2id,
   memoryCost: 65536,   // 64 MiB
   timeCost: 3,          // 3 iterations
   parallelism: 4,       // 4 parallel threads
+  raw: false,
 };
 
 /**

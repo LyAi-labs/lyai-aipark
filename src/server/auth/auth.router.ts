@@ -90,7 +90,9 @@ authRouter.post('/register', async (req: Request, res: Response) => {
     return;
   }
 
-  const { email, name, password } = parsed.data;
+  // FINDING-02 fix: normalize email to lowercase (PostgreSQL VARCHAR is case-sensitive)
+  const email = parsed.data.email.toLowerCase().trim();
+  const { name, password } = parsed.data;
 
   // Check uniqueness
   const existing = await db.user.findUnique({ where: { email } });
@@ -141,7 +143,9 @@ authRouter.post('/login', async (req: Request, res: Response) => {
     return;
   }
 
-  const { email, password } = parsed.data;
+  // FINDING-02 fix: normalize email to lowercase before lookup
+  const email = parsed.data.email.toLowerCase().trim();
+  const { password } = parsed.data;
 
   const user = await db.user.findUnique({ where: { email } });
 
@@ -216,13 +220,16 @@ authRouter.post('/refresh', async (req: Request, res: Response) => {
     .update(rawRefreshToken)
     .digest('hex');
 
-  // Refresh token rotation: find and delete the old token record
-  const stored = await db.userRefreshToken.findFirst({
+  // FINDING-01 fix: atomic delete — if count=0, token was already consumed or never existed.
+  // This prevents a race condition where two concurrent requests both pass a findFirst check
+  // before either has deleted the record, allowing double token issuance.
+  const deleted = await db.userRefreshToken.deleteMany({
     where: { familyId: payload.familyId, tokenHash: incomingHash },
   });
 
-  if (!stored) {
-    // Possible token reuse attack — invalidate the entire family
+  if (deleted.count === 0) {
+    // Token was not found: either already rotated (reuse attack) or never existed.
+    // Invalidate the entire family as a precaution.
     await db.userRefreshToken.deleteMany({
       where: { familyId: payload.familyId },
     });
@@ -233,9 +240,6 @@ authRouter.post('/refresh', async (req: Request, res: Response) => {
     });
     return;
   }
-
-  // Delete old token
-  await db.userRefreshToken.delete({ where: { id: stored.id } });
 
   const user = await db.user.findUnique({
     where: { id: payload.sub },

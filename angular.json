@@ -37,7 +37,8 @@
             },
             "externalDependencies": [
               "@google/genai",
-              "@prisma/client"
+              "@prisma/client",
+              "argon2"
             ]
           },
           "configurations": {
@@ -61,7 +62,9 @@
               "extractLicenses": false,
               "sourceMap": true,
               "externalDependencies": [
-                "@google/genai"
+                "@google/genai",
+                "@prisma/client",
+                "argon2"
               ]
             }
           },

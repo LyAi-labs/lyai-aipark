@@ -5,6 +5,7 @@
  */
 
 import jwt from 'jsonwebtoken';
+import crypto from 'node:crypto';
 import type { JwtAccessPayload, JwtRefreshPayload } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -62,6 +63,7 @@ export function signRefreshToken(
   return jwt.sign(payload, jwtSecret(), {
     expiresIn: REFRESH_TOKEN_TTL,
     algorithm: 'HS256',
+    jwtid: crypto.randomUUID(),
   });
 }
 
