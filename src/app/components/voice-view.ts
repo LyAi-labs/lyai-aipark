@@ -29,6 +29,15 @@ import { Scene } from '../models/studio.models';
           <div class="flex items-center gap-2">
             <button
               type="button"
+              (click)="synthesizeAll()"
+              [disabled]="isSynthesizing()"
+              class="flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 disabled:opacity-50 transition-colors"
+            >
+              <mat-icon class="!text-sm !w-4 !h-4">{{ isSynthesizing() ? 'sync' : 'multitrack_audio' }}</mat-icon>
+              <span>{{ isSynthesizing() ? 'Sintetizando...' : 'Sintetizar Todas las Voces (.WAV)' }}</span>
+            </button>
+            <button
+              type="button"
               (click)="goToAnimation()"
               class="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-zinc-950 hover:bg-amber-400 transition-colors shadow-sm"
             >
@@ -132,14 +141,33 @@ import { Scene } from '../models/studio.models';
                   </div>
 
                   <div class="flex items-center gap-2">
+                    @if (scene.audioUrl) {
+                      <span class="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-mono font-bold text-emerald-400 flex items-center gap-1">
+                        <mat-icon class="!text-[12px] !w-3 !h-3">check_circle</mat-icon>
+                        <span>WAV Listo ({{ scene.measuredAudioDuration || scene.duration }}s)</span>
+                      </span>
+                    } @else {
+                      <span class="rounded bg-zinc-800 px-2 py-0.5 text-[10px] font-mono text-zinc-400">
+                        Pendiente
+                      </span>
+                    }
+                    <button
+                      type="button"
+                      (click)="synthesizeScene(idx)"
+                      [disabled]="isSceneSynthesizing(idx)"
+                      class="flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 disabled:opacity-50 transition-colors"
+                    >
+                      <mat-icon class="!text-xs !w-3 !h-3 text-amber-400">{{ isSceneSynthesizing(idx) ? 'sync' : 'auto_fix_high' }}</mat-icon>
+                      <span>{{ scene.audioUrl ? 'Re-sintetizar' : 'Sintetizar .WAV' }}</span>
+                    </button>
                     <!-- Listen Dialogue Button -->
                     <button
                       type="button"
-                      (click)="playSceneAudio(scene)"
-                      class="flex items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs font-medium text-zinc-200 hover:bg-zinc-700 transition-colors"
+                      (click)="playSceneAudio(scene, idx)"
+                      class="flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors"
                     >
-                      <mat-icon class="!text-sm !w-4 !h-4 text-amber-400">play_arrow</mat-icon>
-                      <span>Escuchar Fragmento</span>
+                      <mat-icon class="!text-sm !w-4 !h-4 text-amber-400">{{ currentlyPlayingScene() === idx ? 'stop' : 'play_arrow' }}</mat-icon>
+                      <span>{{ currentlyPlayingScene() === idx ? 'Detener' : 'Escuchar WAV' }}</span>
                     </button>
                   </div>
                 </div>
@@ -175,18 +203,64 @@ import { Scene } from '../models/studio.models';
 export class VoiceView {
   studio = inject(Studio);
 
-  testVoice(speaker: string, text: string, pitch = 1.0, speed = 1.0): void {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.pitch = pitch;
-      utterance.rate = speed;
-      utterance.lang = 'es-ES';
-      window.speechSynthesis.speak(utterance);
+  isSynthesizing = signal<boolean>(false);
+  synthesizingSceneIdx = signal<number | null>(null);
+  currentlyPlayingScene = signal<number | null>(null);
+  private currentAudio: HTMLAudioElement | null = null;
+
+  isSceneSynthesizing(idx: number): boolean {
+    return this.synthesizingSceneIdx() === idx;
+  }
+
+  async synthesizeAll(): Promise<void> {
+    this.isSynthesizing.set(true);
+    try {
+      await this.studio.synthesizeAllEpisodeVoices();
+    } finally {
+      this.isSynthesizing.set(false);
     }
   }
 
-  playSceneAudio(scene: Scene): void {
+  async synthesizeScene(idx: number): Promise<void> {
+    this.synthesizingSceneIdx.set(idx);
+    try {
+      await this.studio.synthesizeSceneAudio(idx);
+    } finally {
+      this.synthesizingSceneIdx.set(null);
+    }
+  }
+
+  testVoice(speaker: string, text: string, pitch = 1.0, speed = 1.0, voiceType = 'es-ES-Neural2-A'): void {
+    this.studio.testCharacterVoice(speaker, text, pitch, speed, voiceType);
+  }
+
+  playSceneAudio(scene: Scene, idx: number): void {
+    if (this.currentAudio) {
+      this.currentAudio.pause();
+      this.currentAudio = null;
+    }
+    if (this.currentlyPlayingScene() === idx) {
+      this.currentlyPlayingScene.set(null);
+      return;
+    }
+
+    if (scene.audioUrl) {
+      this.currentlyPlayingScene.set(idx);
+      this.currentAudio = new Audio(scene.audioUrl);
+      this.currentAudio.onended = () => {
+        this.currentlyPlayingScene.set(null);
+        this.currentAudio = null;
+      };
+      this.currentAudio.onerror = () => {
+        this.currentlyPlayingScene.set(null);
+        this.currentAudio = null;
+      };
+      this.currentAudio.play().catch(() => {
+        this.currentlyPlayingScene.set(null);
+      });
+      return;
+    }
+
     const textToSpeak = scene.dialogue || scene.narration;
     if (!textToSpeak) return;
 

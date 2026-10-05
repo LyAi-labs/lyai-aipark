@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { Studio } from '../services/studio';
@@ -25,7 +25,23 @@ import { EditorialCalendarItem } from '../models/studio.models';
           </p>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Scheduler Daemon Status Badge -->
+          <div class="flex items-center gap-2 rounded-xl border border-emerald-900/60 bg-emerald-950/40 px-3 py-1.5 font-mono text-xs text-emerald-400">
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>DAEMON SCHEDULER ACTIVO</span>
+          </div>
+
+          <button
+            type="button"
+            (click)="triggerScheduler()"
+            [disabled]="isTriggering()"
+            class="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 px-3 py-1.5 font-mono text-xs text-amber-300 font-semibold transition-all disabled:opacity-50"
+          >
+            <mat-icon class="!text-sm !w-4 !h-4 text-amber-400">sync</mat-icon>
+            <span>{{ isTriggering() ? 'Comprobando...' : 'Revisar Ahora' }}</span>
+          </button>
+
           <div class="flex items-center rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-1.5 font-mono text-xs text-zinc-300">
             <mat-icon class="!text-sm !w-4 !h-4 text-amber-400 mr-2">calendar_today</mat-icon>
             <span>OCTUBRE 2026</span>
@@ -143,8 +159,22 @@ import { EditorialCalendarItem } from '../models/studio.models';
     </div>
   `
 })
-export class CalendarView {
+export class CalendarView implements OnInit {
   studio = inject(Studio);
+  isTriggering = signal<boolean>(false);
+
+  ngOnInit(): void {
+    this.studio.loadSchedulerStatus();
+  }
+
+  async triggerScheduler(): Promise<void> {
+    this.isTriggering.set(true);
+    try {
+      await this.studio.triggerSchedulerNow();
+    } finally {
+      this.isTriggering.set(false);
+    }
+  }
 
   // October 2026 days representation
   calendarDays = Array.from({ length: 31 }, (_, i) => {

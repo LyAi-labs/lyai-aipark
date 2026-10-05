@@ -36,6 +36,7 @@ enum JobType {
   VIDEO_COMPOSITION
   FFMPEG_RENDER
   VALIDATION
+  YOUTUBE_PUBLISH
 }
 
 enum JobStatus {

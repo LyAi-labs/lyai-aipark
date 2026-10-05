@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormControl, FormGroup, ReactiveFormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
@@ -93,6 +93,28 @@ import { Studio } from '../services/studio';
               <div class="border-l border-zinc-800 pl-4">
                 <span class="text-zinc-500 block text-[10px]">Vídeos en Canal</span>
                 <span class="text-zinc-200 font-bold text-sm">{{ studio.channelInfo().videoCount }}</span>
+              </div>
+              <div class="border-l border-zinc-800 pl-4">
+                @if (studio.channelInfo().isDemoMode) {
+                  <button
+                    type="button"
+                    (click)="studio.connectYouTube()"
+                    class="flex items-center gap-1.5 rounded-xl border border-red-500/40 bg-red-500/10 px-3.5 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/20 transition-colors"
+                    title="Iniciar flujo de consentimiento Google OAuth 2.0"
+                  >
+                    <mat-icon class="!text-sm !w-4 !h-4 text-red-400">link</mat-icon>
+                    <span>Vincular Canal Real</span>
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    (click)="studio.disconnectYouTube()"
+                    class="flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-xs font-semibold text-zinc-300 hover:bg-zinc-700 transition-colors"
+                  >
+                    <mat-icon class="!text-sm !w-4 !h-4 text-zinc-400">link_off</mat-icon>
+                    <span>Desconectar</span>
+                  </button>
+                }
               </div>
             </div>
           </div>
@@ -297,7 +319,7 @@ import { Studio } from '../services/studio';
     </div>
   `
 })
-export class YouTubeView {
+export class YouTubeView implements OnInit {
   studio = inject(Studio);
 
   privacyStatus = signal<'private' | 'unlisted' | 'public' | 'scheduled'>('private');
@@ -305,6 +327,16 @@ export class YouTubeView {
   scheduleTime = signal<string>('17:00');
   isPublishing = signal<boolean>(false);
   publishSuccessMessage = signal<string | null>(null);
+
+  ngOnInit(): void {
+    this.studio.loadYouTubeStatus();
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('connected') === 'true') {
+        this.publishSuccessMessage.set('¡Canal de YouTube conectado y sincronizado exitosamente con Google OAuth 2.0!');
+      }
+    }
+  }
 
   setPrivacy(status: 'private' | 'unlisted' | 'public' | 'scheduled'): void {
     this.privacyStatus.set(status);

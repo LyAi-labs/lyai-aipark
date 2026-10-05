@@ -29,13 +29,41 @@ import { Scene } from '../models/studio.models';
           </div>
 
           <div class="flex items-center gap-2">
+            @if (proj.videoTrack.isRendered && proj.videoTrack.videoUrl) {
+              <div class="flex rounded-xl bg-zinc-900 border border-zinc-800 p-0.5 text-xs font-semibold">
+                <button
+                  type="button"
+                  (click)="viewMode.set('animation')"
+                  class="rounded-lg px-2.5 py-1.5 transition-colors flex items-center gap-1.5"
+                  [class.bg-zinc-800]="viewMode() === 'animation'"
+                  [class.text-amber-300]="viewMode() === 'animation'"
+                  [class.text-zinc-400]="viewMode() !== 'animation'"
+                >
+                  <mat-icon class="!text-sm !w-4 !h-4">view_timeline</mat-icon>
+                  <span>Multi-Pista</span>
+                </button>
+                <button
+                  type="button"
+                  (click)="viewMode.set('video')"
+                  class="rounded-lg px-2.5 py-1.5 transition-colors flex items-center gap-1.5"
+                  [class.bg-zinc-800]="viewMode() === 'video'"
+                  [class.text-emerald-300]="viewMode() === 'video'"
+                  [class.text-zinc-400]="viewMode() !== 'video'"
+                >
+                  <mat-icon class="!text-sm !w-4 !h-4">movie</mat-icon>
+                  <span>Vídeo Final MP4</span>
+                </button>
+              </div>
+            }
+
             <button
               type="button"
               (click)="triggerRender()"
-              class="flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-zinc-950 hover:bg-amber-400 transition-colors shadow-sm"
+              [disabled]="studio.isRenderingVideo()"
+              class="flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-zinc-950 hover:bg-amber-400 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <mat-icon class="!text-sm !w-4 !h-4">sync</mat-icon>
-              <span>Ensamblar & Renderizar Episodio</span>
+              <mat-icon class="!text-sm !w-4 !h-4" [class.animate-spin]="studio.isRenderingVideo()">sync</mat-icon>
+              <span>{{ studio.isRenderingVideo() ? 'Renderizando (' + studio.renderingProgress() + '%)...' : 'Ensamblar & Renderizar Episodio' }}</span>
             </button>
             <button
               type="button"
@@ -48,51 +76,127 @@ import { Scene } from '../models/studio.models';
           </div>
         </div>
 
+        <!-- FFmpeg Worker Rendering Status Banner -->
+        @if (studio.isRenderingVideo()) {
+          <div class="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-2 shadow-lg">
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2 text-amber-300 font-semibold font-mono">
+                <mat-icon class="!text-base !w-4 !h-4 animate-spin">autorenew</mat-icon>
+                <span>FFMPEG WORKER EN EJECUCIÓN (ASÍNCRONO / 202 ACCEPTED)</span>
+              </div>
+              <span class="font-mono font-bold text-amber-400 text-sm">{{ studio.renderingProgress() }}%</span>
+            </div>
+            <div class="w-full bg-zinc-800/80 rounded-full h-2.5 overflow-hidden border border-amber-500/20">
+              <div
+                class="bg-amber-500 h-full transition-all duration-300 rounded-full"
+                [style.width.%]="studio.renderingProgress()"
+              ></div>
+            </div>
+            <p class="text-xs text-zinc-400 font-mono flex items-center gap-1.5">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+              <span>{{ studio.renderingStepDescription() }}</span>
+            </p>
+          </div>
+        }
+
         <!-- Cinema Player Preview Window -->
         <div class="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl">
-          <div class="flex items-center justify-between pb-3 border-b border-zinc-800 text-xs">
-            <div class="flex items-center gap-2">
-              <span class="h-2 w-2 rounded-full" [class.bg-emerald-400]="isPlaying()" [class.bg-zinc-600]="!isPlaying()"></span>
-              <span class="font-mono text-zinc-300 font-semibold">{{ currentScene()?.scene_id || 'SCENE_01' }}</span>
-              <span class="text-zinc-500">· {{ currentScene()?.location }}</span>
-            </div>
+          @if (viewMode() === 'video' && proj.videoTrack.isRendered && proj.videoTrack.videoUrl) {
+            <!-- Real Rendered MP4 Video Player -->
+            <div class="space-y-3">
+              <div class="flex items-center justify-between pb-3 border-b border-zinc-800 text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+                  <span class="font-mono text-zinc-200 font-bold">REPRODUCTOR DE VÍDEO COMPUESTO (MP4)</span>
+                  <span class="rounded bg-emerald-500/20 px-2 py-0.5 text-[10px] font-mono text-emerald-300 font-semibold">
+                    1080p @ 24fps H.264 / AAC
+                  </span>
+                </div>
 
-            <!-- Timecode -->
-            <div class="font-mono text-sm font-bold text-amber-400">
-              {{ formattedPlayheadTime }} / {{ formattedTotalTime }}
-            </div>
-          </div>
-
-          <!-- Video viewport container with animation effect -->
-          <div class="relative mt-3 aspect-video w-full rounded-xl overflow-hidden bg-black border border-zinc-900 shadow-inner flex items-center justify-center">
-            @if (currentScene(); as sc) {
-              <div
-                class="w-full h-full object-cover transition-transform duration-1000 ease-out"
-                [class.scale-105]="isPlaying() && sc.motionType === 'zoom-in'"
-                [class.scale-95]="isPlaying() && sc.motionType === 'zoom-out'"
-                [class.translate-x-2]="isPlaying() && sc.motionType === 'pan-right'"
-                [class.-translate-x-2]="isPlaying() && sc.motionType === 'pan-left'"
-              >
-                <div [innerHTML]="sc.visualSvg" class="w-full h-full"></div>
+                <div class="flex items-center gap-2">
+                  <a
+                    [href]="proj.videoTrack.videoUrl"
+                    download
+                    target="_blank"
+                    class="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 py-1 text-[11px] font-mono text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition-colors"
+                  >
+                    <mat-icon class="!text-xs !w-3.5 !h-3.5">download</mat-icon>
+                    <span>Descargar MP4</span>
+                  </a>
+                </div>
               </div>
 
-              <!-- Animated Subtitles WebVTT Overlay -->
-              @if (sc.dialogue || sc.narration) {
-                <div class="absolute bottom-6 inset-x-8 flex justify-center pointer-events-none">
-                  <div class="rounded-lg bg-black/85 px-4 py-2 border border-zinc-800/80 shadow-2xl text-center max-w-xl">
-                    <p class="text-sm font-semibold text-amber-200 tracking-wide drop-shadow-md">
-                      {{ sc.dialogue || sc.narration }}
-                    </p>
-                  </div>
-                </div>
-              }
-            }
-
-            <!-- Camera motion badge -->
-            <div class="absolute top-4 left-4 rounded-md bg-black/70 backdrop-blur-sm px-2.5 py-1 text-[11px] font-mono text-zinc-300 border border-zinc-800">
-              CÁMARA: {{ currentScene()?.motionType || 'ken-burns' | uppercase }}
+              <!-- Native HTML5 Video Element with WebVTT Subtitles -->
+              <div class="relative aspect-video w-full rounded-xl overflow-hidden bg-black border border-zinc-900 shadow-inner flex items-center justify-center">
+                <video
+                  controls
+                  playsinline
+                  class="w-full h-full object-contain"
+                  [src]="proj.videoTrack.videoUrl"
+                >
+                  @if (proj.videoTrack.subtitlesVtt) {
+                    <track
+                      [src]="subtitlesVttBlobUrl()"
+                      kind="subtitles"
+                      srclang="es"
+                      label="Español (Sincronizado)"
+                      default
+                    />
+                  }
+                  Tu navegador no soporta reproducción de vídeo HTML5.
+                </video>
+              </div>
             </div>
-          </div>
+          } @else {
+            <!-- Animation / Scene Viewport Preview -->
+            <div class="flex items-center justify-between pb-3 border-b border-zinc-800 text-xs">
+              <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full" [class.bg-emerald-400]="isPlaying()" [class.bg-zinc-600]="!isPlaying()"></span>
+                <span class="font-mono text-zinc-300 font-semibold">{{ currentScene()?.scene_id || 'SCENE_01' }}</span>
+                <span class="text-zinc-500">· {{ currentScene()?.location }}</span>
+              </div>
+
+              <!-- Timecode -->
+              <div class="font-mono text-sm font-bold text-amber-400">
+                {{ formattedPlayheadTime }} / {{ formattedTotalTime }}
+              </div>
+            </div>
+
+            <!-- Video viewport container with animation effect -->
+            <div class="relative mt-3 aspect-video w-full rounded-xl overflow-hidden bg-black border border-zinc-900 shadow-inner flex items-center justify-center">
+              @if (currentScene(); as sc) {
+                <div
+                  class="w-full h-full object-cover transition-transform duration-1000 ease-out flex items-center justify-center"
+                  [class.scale-105]="isPlaying() && sc.motionType === 'zoom-in'"
+                  [class.scale-95]="isPlaying() && sc.motionType === 'zoom-out'"
+                  [class.translate-x-2]="isPlaying() && sc.motionType === 'pan-right'"
+                  [class.-translate-x-2]="isPlaying() && sc.motionType === 'pan-left'"
+                >
+                  @if (sc.imageUrl) {
+                    <img [src]="sc.imageUrl" alt="Visual de escena ráster" class="w-full h-full object-cover" />
+                  } @else {
+                    <div [innerHTML]="sc.visualSvg" class="w-full h-full"></div>
+                  }
+                </div>
+
+                <!-- Animated Subtitles WebVTT Overlay -->
+                @if (sc.dialogue || sc.narration) {
+                  <div class="absolute bottom-6 inset-x-8 flex justify-center pointer-events-none">
+                    <div class="rounded-lg bg-black/85 px-4 py-2 border border-zinc-800/80 shadow-2xl text-center max-w-xl">
+                      <p class="text-sm font-semibold text-amber-200 tracking-wide drop-shadow-md">
+                        {{ sc.dialogue || sc.narration }}
+                      </p>
+                    </div>
+                  </div>
+                }
+              }
+
+              <!-- Camera motion badge -->
+              <div class="absolute top-4 left-4 rounded-md bg-black/70 backdrop-blur-sm px-2.5 py-1 text-[11px] font-mono text-zinc-300 border border-zinc-800">
+                CÁMARA: {{ currentScene()?.motionType || 'ken-burns' | uppercase }}
+              </div>
+            </div>
+          }
 
           <!-- Transport Controls -->
           <div class="mt-4 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-zinc-800">
@@ -300,10 +404,18 @@ import { Scene } from '../models/studio.models';
 export class AnimationEditorView implements OnDestroy {
   studio = inject(Studio);
 
+  viewMode = signal<'animation' | 'video'>('animation');
   currentSceneIndex = signal<number>(0);
   isPlaying = signal<boolean>(false);
   playheadSeconds = signal<number>(0);
   private timerInterval: any = null;
+
+  subtitlesVttBlobUrl(): string | undefined {
+    const vtt = this.studio.activeProject()?.videoTrack?.subtitlesVtt;
+    if (!vtt) return undefined;
+    const blob = new Blob([vtt], { type: 'text/vtt' });
+    return URL.createObjectURL(blob);
+  }
 
   currentScene() {
     const p = this.studio.activeProject();
@@ -409,8 +521,11 @@ export class AnimationEditorView implements OnDestroy {
     navigator.clipboard.writeText(txt);
   }
 
-  triggerRender(): void {
-    this.studio.renderVideo();
+  async triggerRender(): Promise<void> {
+    await this.studio.renderVideo();
+    if (this.studio.activeProject()?.videoTrack?.isRendered) {
+      this.viewMode.set('video');
+    }
   }
 
   goToQc(): void {

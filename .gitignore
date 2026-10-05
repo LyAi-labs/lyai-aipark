@@ -48,3 +48,7 @@ Thumbs.db
 
 # Workspace experiments
 experiments/
+
+# Local Storage Engine assets
+/storage/
+tmp-test-storage/

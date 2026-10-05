@@ -10,7 +10,8 @@ export type ProjectPipelineStatus =
   | 'thumbnail'
   | 'ready'
   | 'scheduled'
-  | 'published';
+  | 'published'
+  | 'blocked';
 
 export interface CharacterVoiceProfile {
   voiceType: string;
@@ -55,8 +56,14 @@ export interface Scene {
   duration: number; // in seconds
   visual_prompt: string;
   visualSvg?: string;
+  imageUrl?: string;
+  imageStorageKey?: string;
+  visualState?: 'pending' | 'generating' | 'ready' | 'failed';
+  seedUsed?: number;
   motionType: SceneMotionType;
   voiceAudioState?: 'ready' | 'pending' | 'synthesized';
+  audioUrl?: string;
+  measuredAudioDuration?: number;
 }
 
 export interface QualityControlCategory {
@@ -68,14 +75,24 @@ export interface QualityControlCategory {
 export interface QualityControlReport {
   overallScore: number;
   approvedForProduction: boolean;
+  isBlocked?: boolean;
+  blockingReasons?: string[];
+  driftTelemetry?: {
+    audioDurationSeconds: number;
+    videoDurationSeconds: number;
+    driftSeconds: number;
+    maxAllowedDriftSeconds: number;
+    isSynchronized: boolean;
+  };
   categories: {
     storyCoherence: QualityControlCategory;
     characterContinuity: QualityControlCategory;
     audioAndDialogue: QualityControlCategory;
     visualFeasibility: QualityControlCategory;
     safetyAndCoppa: QualityControlCategory;
-    youtubeEngagement: QualityControlCategory;
-    [key: string]: QualityControlCategory;
+    youtubeEngagement?: QualityControlCategory;
+    technicalDelivery?: QualityControlCategory;
+    [key: string]: QualityControlCategory | undefined;
   };
   flags: string[];
   recommendations: string[];

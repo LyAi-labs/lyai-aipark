@@ -599,12 +599,103 @@ Durante la Phase 00 se detectó lógica de negocio crítica que actualmente resi
   * [x] Definición de servicio PostgreSQL 16 en [docker-compose.yml](file:///c:/Users/Glado/CartoonFactory/docker-compose.yml).
   * [x] Script de seed con datos maestros en [prisma/seed.ts](file:///c:/Users/Glado/CartoonFactory/prisma/seed.ts).
   * [x] Endpoint de salud y diagnóstico de base de datos en `GET /api/health/db`.
-* **[ ] PHASE 03 — SECURITY, AUTH & MULTI-TENANCY (PENDIENTE)**
+* **[x] PHASE 03 — SECURITY, AUTH & MULTI-TENANCY (COMPLETADA)**
+  * [x] Autenticación JWT HS256 con separación estricta access/refresh y validación de secret >= 32 chars.
+  * [x] Hashing seguro de contraseñas con Argon2id y defensa contra timing attacks.
+  * [x] Rotación atómica de refresh tokens en base de datos (`familyId` con mitigación de replay attack).
+  * [x] Cookies `HttpOnly`, `SameSite=Strict`, `Secure` (prod) y soporte de header `Bearer`.
+  * [x] Middleware global `requireAuth` protegiendo todos los endpoints mutantes y legacy en `/api/*`.
+  * [x] Suite formal de 34 pruebas en `src/server/auth/auth.security.spec.ts` (100% pass).
+  * [x] Reporte de auditoría técnica en [docs/PHASE_03_1_SECURITY_AUDIT.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_03_1_SECURITY_AUDIT.md).
+* **[x] PHASE 04 — ROBUST AI GENERATION & PROMPT HARDENING (COMPLETADA)**
+  * [x] Validación Zod al 100% para todas las entradas y salidas de modelos de IA ([src/server/ai/schemas.ts](file:///c:/Users/Glado/CartoonFactory/src/server/ai/schemas.ts)).
+  * [x] Sanitización estricta de prompts contra inyecciones, delimitadores, tokens especiales y caracteres BiDi ([src/server/ai/sanitizer.ts](file:///c:/Users/Glado/CartoonFactory/src/server/ai/sanitizer.ts)).
+  * [x] Calculadora de costes en Euros (EUR) con precisión IEEE 754 de 6 decimales ([src/server/ai/cost.calculator.ts](file:///c:/Users/Glado/CartoonFactory/src/server/ai/cost.calculator.ts)).
+  * [x] Telemetría y trazabilidad de tokens persistida en `provider_executions` con hash SHA-256 ([src/server/ai/telemetry.service.ts](file:///c:/Users/Glado/CartoonFactory/src/server/ai/telemetry.service.ts)).
+  * [x] Servicio desacoplado `GeminiService` con guardarraíles COPPA y fallback de alta fidelidad ([src/server/ai/gemini.service.ts](file:///c:/Users/Glado/CartoonFactory/src/server/ai/gemini.service.ts)).
+  * [x] Enrutador Express modular `aiRouter` montado en [src/server.ts](file:///c:/Users/Glado/CartoonFactory/src/server.ts).
+  * [x] Suite de 31 pruebas de seguridad y robustez en [src/server/ai/ai.security.spec.ts](file:///c:/Users/Glado/CartoonFactory/src/server/ai/ai.security.spec.ts) (65 tests globales pasando).
+  * [x] Documentación de arquitectura en [docs/PHASE_04_ROBUST_AI_GENERATION.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_04_ROBUST_AI_GENERATION.md).
+* **[x] PHASE 05 — STORAGEPROVIDER ABSTRACTION ENGINE (COMPLETADA)**
+  * [x] Interfaz unificada `StorageProvider` desacoplada del filesystem Windows ([src/server/storage/storage.interface.ts](file:///c:/Users/Glado/CartoonFactory/src/server/storage/storage.interface.ts)).
+  * [x] Sanitizador de claves POSIX y blindaje contra path traversal, null bytes y prefijos de unidad ([src/server/storage/path.sanitizer.ts](file:///c:/Users/Glado/CartoonFactory/src/server/storage/path.sanitizer.ts)).
+  * [x] Utilidades ligeras para tipos MIME y streaming por rangos HTTP 206 ([src/server/storage/mime.utils.ts](file:///c:/Users/Glado/CartoonFactory/src/server/storage/mime.utils.ts)).
+  * [x] Módulo de firmado criptográfico de URLs con HMAC-SHA256, TTL y defensa contra timing attacks ([src/server/storage/signer.ts](file:///c:/Users/Glado/CartoonFactory/src/server/storage/signer.ts)).
+  * [x] Implementación `LocalStorageProvider` con confinamiento estricto de directorio y cero rutas absolutas ([src/server/storage/local.storage.ts](file:///c:/Users/Glado/CartoonFactory/src/server/storage/local.storage.ts)).
+  * [x] Implementación `S3CompatibleStorageProvider` con motor nativo AWS SigV4 y presigned URLs sin librerías pesadas ([src/server/storage/s3.storage.ts](file:///c:/Users/Glado/CartoonFactory/src/server/storage/s3.storage.ts)).
+  * [x] Factoría y singleton para conmutación fluida vía `STORAGE_DRIVER=local|s3` ([src/server/storage/storage.factory.ts](file:///c:/Users/Glado/CartoonFactory/src/server/storage/storage.factory.ts)).
+  * [x] Router Express `storageRouter` con endpoints públicos de streaming (`GET /*key`, `GET /signed`) y autenticados (`POST /upload`, `POST /sign`, `DELETE /*key`) montado en [src/server.ts](file:///c:/Users/Glado/CartoonFactory/src/server.ts).
+  * [x] Suite de 40 pruebas en [src/server/storage/storage.spec.ts](file:///c:/Users/Glado/CartoonFactory/src/server/storage/storage.spec.ts) (105 tests globales pasando al 100%).
+  * [x] Informe técnico de arquitectura en [docs/PHASE_05_STORAGE_PROVIDER_ENGINE.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_05_STORAGE_PROVIDER_ENGINE.md).
+* **[x] PHASE 06 — REAL VOICE & AUDIO PIPELINE (COMPLETADA)**
+  * [x] Motor mecánico RIFF/WAVE PCM de 44 bytes y analizador binario de duraciones en microsegundos ([src/server/audio/wav.utils.ts](file:///c:/Users/Glado/CartoonFactory/src/server/audio/wav.utils.ts)).
+  * [x] Sintetizador determinista de ondas de voz multifórmicas para desarrollo offline y testing sin dependencias externas ([src/server/audio/wav.utils.ts](file:///c:/Users/Glado/CartoonFactory/src/server/audio/wav.utils.ts)).
+  * [x] Catálogo canónico de presets vocales preescolares con Neural2/Journey ([src/server/audio/voice.catalog.ts](file:///c:/Users/Glado/CartoonFactory/src/server/audio/voice.catalog.ts)).
+  * [x] Proveedor Google Cloud Text-to-Speech con modulación de tono en semitonos y fallback resiliente ([src/server/audio/google-tts.provider.ts](file:///c:/Users/Glado/CartoonFactory/src/server/audio/google-tts.provider.ts)).
+  * [x] Generador de subtítulos WebVTT (`.vtt`) y SubRip (`.srt`) con alineación temporal milimétrica y cálculo de drift ([src/server/audio/subtitle.generator.ts](file:///c:/Users/Glado/CartoonFactory/src/server/audio/subtitle.generator.ts)).
+  * [x] Orquestador de síntesis `VoicePipelineService` con subida a `StorageProvider` y telemetría de costes en PostgreSQL ([src/server/audio/voice.service.ts](file:///c:/Users/Glado/CartoonFactory/src/server/audio/voice.service.ts)).
+  * [x] Router Express `voiceRouter` (`/catalog`, `/test`, `/scene`, `/batch`) con protección JWT y montado en [src/server.ts](file:///c:/Users/Glado/CartoonFactory/src/server.ts).
+  * [x] Integración en frontend Angular (`Studio` service & `VoiceView`) con reproductor HTML5 real y badges de estado ([src/app/components/voice-view.ts](file:///c:/Users/Glado/CartoonFactory/src/app/components/voice-view.ts)).
+  * [x] Suite de 28 pruebas exhaustivas en [src/server/audio/audio.spec.ts](file:///c:/Users/Glado/CartoonFactory/src/server/audio/audio.spec.ts) (133 tests globales pasando al 100%).
+  * [x] Reporte de arquitectura técnica en [docs/PHASE_06_REAL_VOICE_AUDIO_PIPELINE.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_06_REAL_VOICE_AUDIO_PIPELINE.md).
+* **[x] PHASE 07 — VISUAL GENERATION & STORYBOARD PIPELINE (COMPLETADA)**
+  * [x] Codificador binario puro PNG (RFC 2083 / ISO/IEC 15948) y `RasterCanvas` contiguo sin dependencias externas ([src/server/visuals/png.encoder.ts](file:///c:/Users/Glado/CartoonFactory/src/server/visuals/png.encoder.ts)).
+  * [x] Motor de consistencia de personajes (`ConsistencyEngine`) con inyección de prompts maestros y semillas deterministas de 32 bits ([src/server/visuals/consistency.engine.ts](file:///c:/Users/Glado/CartoonFactory/src/server/visuals/consistency.engine.ts)).
+  * [x] Proveedor determinista `SyntheticImageProvider` para escenas 16:9, model sheets 1:1 y miniaturas 1280x720 offline/dev/tests ([src/server/visuals/synthetic.provider.ts](file:///c:/Users/Glado/CartoonFactory/src/server/visuals/synthetic.provider.ts)).
+  * [x] Proveedor `ImagenProvider` para Google Imagen 3 con fallback automático resiliente a generación sintética ([src/server/visuals/imagen.provider.ts](file:///c:/Users/Glado/CartoonFactory/src/server/visuals/imagen.provider.ts)).
+  * [x] Orquestador `VisualService` con subida física a `StorageProvider` (rutas POSIX relativas), registro de assets e inmutabilidad en PostgreSQL con checksum SHA-256 ([src/server/visuals/visual.service.ts](file:///c:/Users/Glado/CartoonFactory/src/server/visuals/visual.service.ts)).
+  * [x] Router Express `visualRouter` (`/scene`, `/batch`, `/character`, `/thumbnail`) con validación Zod y protección JWT montado en [src/server.ts](file:///c:/Users/Glado/CartoonFactory/src/server.ts).
+  * [x] Integración en frontend Angular (`StoryboardView` & `Studio` service) con soporte de imagen ráster real 16:9, badges de formato y botón de lote ([src/app/components/storyboard-view.ts](file:///c:/Users/Glado/CartoonFactory/src/app/components/storyboard-view.ts)).
+  * [x] Suite de 21 pruebas exhaustivas en [src/server/visuals/visual.spec.ts](file:///c:/Users/Glado/CartoonFactory/src/server/visuals/visual.spec.ts) (154 tests globales pasando al 100%).
+  * [x] Reporte de arquitectura técnica en [docs/PHASE_07_VISUAL_GENERATION_STORYBOARD.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_07_VISUAL_GENERATION_STORYBOARD.md).
+
+* **[x] PHASE 08 — REAL VIDEO RENDERING ENGINE (FFMPEG WORKER) (COMPLETADA)**
+  * [x] Envoltorio transparente para proceso hijo de FFmpeg (`runFfmpegCommand`, `renderSceneClip`, `concatSceneClips`, `mixAudioTracks`) sin dependencias externas pesadas ([src/server/render/ffmpeg.wrapper.ts](file:///c:/Users/Glado/CartoonFactory/src/server/render/ffmpeg.wrapper.ts)).
+  * [x] Sintetizador determinista de música instrumental infantil en formato PCM WAV 44.1kHz estéreo ([src/server/render/music.synthesizer.ts](file:///c:/Users/Glado/CartoonFactory/src/server/render/music.synthesizer.ts)).
+  * [x] Orquestador de renderizado asíncrono no bloqueante (`RenderService`) con arquitectura de jobs de 7 pasos atómicos, subida a `StorageProvider` (MP4, VTT, SRT) y persistencia en PostgreSQL (`Asset` VIDEO_RENDER, `AssetVersion` con SHA-256) ([src/server/render/render.service.ts](file:///c:/Users/Glado/CartoonFactory/src/server/render/render.service.ts)).
+  * [x] Router Express `renderRouter` (`/start`, `/jobs/:jobId`, `/jobs/:jobId/events`, `/jobs/:jobId/cancel`, `/capabilities`) con retorno 202 Accepted, streaming SSE y protección JWT ([src/server/render/render.router.ts](file:///c:/Users/Glado/CartoonFactory/src/server/render/render.router.ts)).
+  * [x] Integración en frontend Angular (`Studio` service & `AnimationEditorView`) eliminando los `setTimeout` simulados, agregando sondeo en tiempo real y reproductor nativo HTML5 MP4 con subtítulos WebVTT incrustados ([src/app/components/animation-editor-view.ts](file:///c:/Users/Glado/CartoonFactory/src/app/components/animation-editor-view.ts)).
+  * [x] Suite de 16 pruebas automatizadas en [src/server/render/render.spec.ts](file:///c:/Users/Glado/CartoonFactory/src/server/render/render.spec.ts) (170 tests globales pasando al 100%).
+  * [x] Reporte de arquitectura técnica en [docs/PHASE_08_REAL_VIDEO_RENDERING_ENGINE.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_08_REAL_VIDEO_RENDERING_ENGINE.md).
+
+* **[x] PHASE 09 — OBJECTIVE QUALITY CONTROL (AUDIO DRIFT & COPPA CHECKS) (COMPLETADA)**
+  * [x] Verificador determinista de Audio Drift (`drift.verifier.ts`) con tolerancia reglamentaria $\le 0.05$s (50 ms), sonda FFprobe nativa y análisis de cadencia escena por escena ([src/server/qc/drift.verifier.ts](file:///c:/Users/Glado/CartoonFactory/src/server/qc/drift.verifier.ts)).
+  * [x] Verificador determinista COPPA & FTC 16 CFR Part 312 (`coppa.verifier.ts`) con bloqueo de extracción de PII (emails, teléfonos, domicilios), anulación de llamadas comerciales agresivas y garantía de banderas obligatorias (`madeForKids: true`, visibilidad `PRIVATE`) ([src/server/qc/coppa.verifier.ts](file:///c:/Users/Glado/CartoonFactory/src/server/qc/coppa.verifier.ts)).
+  * [x] Orquestador `QualityControlService` con bloqueo automático del proyecto (`isBlocked = true`, `approvedForProduction = false`) ante cualquier fallo crítico y persistencia relacional en PostgreSQL (`QCReport` y `QCCheck`) ([src/server/qc/qc.service.ts](file:///c:/Users/Glado/CartoonFactory/src/server/qc/qc.service.ts)).
+  * [x] Router Express `qcRouter` (`/audit`, `/check-drift`, `/check-coppa`, `/reports/:episodeId`, `/approve/:episodeId`) con validación Zod estricta montado en [src/server.ts](file:///c:/Users/Glado/CartoonFactory/src/server.ts).
+  * [x] Gatekeeper de publicación en [src/server.ts](file:///c:/Users/Glado/CartoonFactory/src/server.ts): `/api/youtube/publish` aborta con HTTP 422 si el episodio presenta drift desfasado o infracción COPPA activa.
+  * [x] Integración en frontend Angular (`QcView` & `Studio` service) con telemetría de drift en milisegundos, banner de bloqueo crítico e inhabilitación reactiva de avance a emisión ([src/app/components/qc-view.ts](file:///c:/Users/Glado/CartoonFactory/src/app/components/qc-view.ts)).
+  * [x] Suite de 26 pruebas automatizadas en [src/server/qc/qc.spec.ts](file:///c:/Users/Glado/CartoonFactory/src/server/qc/qc.spec.ts) (196 tests globales pasando al 100%).
+  * [x] Reporte de arquitectura técnica en [docs/PHASE_09_OBJECTIVE_QUALITY_CONTROL.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_09_OBJECTIVE_QUALITY_CONTROL.md).
+
+* **[x] PHASE 10 — REAL YOUTUBE INTEGRATION (OAUTH 2.0 & DATA API V3) (COMPLETADA)**
+  * [x] Módulo de cifrado simétrico autenticado AES-256-GCM (`encryption.ts`) para credenciales en reposo con derivación de claves SHA-256, vectores de inicialización NIST de 96 bits independientes por token y verificación de integridad estricta ([src/server/youtube/encryption.ts](file:///c:/Users/Glado/CartoonFactory/src/server/youtube/encryption.ts)).
+  * [x] Servicio Google OAuth 2.0 (`oauth.service.ts`) con generación de URLs de consentimiento con scopes oficiales (`youtube.upload`, `youtube.readonly`, `userinfo.email`, `userinfo.profile`), protección CSRF mediante parámetro `state` firmado con HMAC-SHA256 y rotación/refresco automático de access tokens ([src/server/youtube/oauth.service.ts](file:///c:/Users/Glado/CartoonFactory/src/server/youtube/oauth.service.ts)).
+  * [x] Servicio de gestión y sincronización de canales de YouTube (`channel.service.ts`) con persistencia relacional en PostgreSQL (`YouTubeChannel` y conexión M:N `YouTubeChannelConnection`) y desconexión segura ([src/server/youtube/channel.service.ts](file:///c:/Users/Glado/CartoonFactory/src/server/youtube/channel.service.ts)).
+  * [x] Uploader reanudable de YouTube Data API v3 (`uploader.service.ts`) con protocolo en 2 fases (`uploadType=resumable`), inyección obligatoria de metadatos COPPA (`selfDeclaredMadeForKids: true`), visibilidad `PRIVATE` por defecto, subida opcional de miniaturas 1280x720 PNG y registro en `YouTubePublication` y telemetría de cuotas en `ProviderExecution` ([src/server/youtube/uploader.service.ts](file:///c:/Users/Glado/CartoonFactory/src/server/youtube/uploader.service.ts)).
+  * [x] Orquestador maestro `YouTubeService` con integración del Gatekeeper de Calidad (QC) de Phase 09 (bloqueo HTTP 422 ante desincronización o infracción COPPA) y modo Sandbox resiliente sin dependencias externas pesadas ([src/server/youtube/youtube.service.ts](file:///c:/Users/Glado/CartoonFactory/src/server/youtube/youtube.service.ts)).
+  * [x] Router Express `youtubeRouter` (`/auth-url`, `/callback`, `/status`, `/publish`, `/disconnect`, `/publications/:episodeId`) montado en [src/server.ts](file:///c:/Users/Glado/CartoonFactory/src/server.ts).
+  * [x] Integración en frontend Angular (`YouTubeView` y servicio `Studio`) con tarjetas de canal reactivas, botones de vincular/desvincular OAuth 2.0 y soporte de publicación ([src/app/components/youtube-view.ts](file:///c:/Users/Glado/CartoonFactory/src/app/components/youtube-view.ts)).
+  * [x] Suite de 29 pruebas automatizadas en [src/server/youtube/youtube.spec.ts](file:///c:/Users/Glado/CartoonFactory/src/server/youtube/youtube.spec.ts) (225 tests globales pasando al 100%).
+* [x] PHASE 11 — BACKGROUND SCHEDULER & WORKER QUEUES (COMPLETADA)
+  * [x] Motor de jobs desacoplado en `cartoon-worker` respaldado por PostgreSQL (`production_jobs` y `job_steps`) y fallback en memoria resiliente ([src/server/scheduler/worker.queue.ts](file:///c:/Users/Glado/CartoonFactory/src/server/scheduler/worker.queue.ts)).
+  * [x] Catálogo canónico de handlers asíncronos para todas las etapas pesadas: `SCRIPTING`, `VOICE_GENERATION`, `ASSET_GENERATION`, `STORYBOARDING`, `FFMPEG_RENDER`, `VALIDATION` y `YOUTUBE_PUBLISH` ([src/server/scheduler/job.handlers.ts](file:///c:/Users/Glado/CartoonFactory/src/server/scheduler/job.handlers.ts)).
+  * [x] Control estricto de concurrencia (`maxConcurrency`), bloqueo atómico de tareas (*claim*), pasos atómicos inmutables con `uq_job_step_index`, reintentos automáticos y cancelación por `AbortController`.
+  * [x] Planificador editorial desatendido (`EditorialScheduler`) que monitoriza `editorial_calendar_items`, verifica el Gatekeeper de Calidad (QC) de Phase 09, y dispara automáticamente publicaciones a YouTube conforme a normativas COPPA al llegar su hora programada ([src/server/scheduler/editorial.scheduler.ts](file:///c:/Users/Glado/CartoonFactory/src/server/scheduler/editorial.scheduler.ts)).
+  * [x] Transición automática del calendario a `BROADCASTED`, vinculación de `youtubePublicationId` y persistencia en PostgreSQL.
+  * [x] Coordinador maestro singleton `SchedulerService` y router Express `schedulerRouter` con semántica HTTP 202 Accepted, SSE streaming (`/jobs/:id/events`), y endpoints CRUD para calendario y gestión de colas ([src/server/scheduler/scheduler.router.ts](file:///c:/Users/Glado/CartoonFactory/src/server/scheduler/scheduler.router.ts)).
+  * [x] Integración en interfaz de usuario Angular (`CalendarView` y servicio `Studio`) con indicador reactivo del demonio y botón de comprobación manual forzada ([src/app/components/calendar-view.ts](file:///c:/Users/Glado/CartoonFactory/src/app/components/calendar-view.ts)).
+  * [x] Suite de 27 pruebas automatizadas en [src/server/scheduler/scheduler.spec.ts](file:///c:/Users/Glado/CartoonFactory/src/server/scheduler/scheduler.spec.ts) (252 tests globales pasando al 100% y `ng build` exitoso).
+  * [x] Reporte de arquitectura técnica en [docs/PHASE_11_BACKGROUND_SCHEDULER_WORKER_QUEUES.md](file:///c:/Users/Glado/CartoonFactory/docs/PHASE_11_BACKGROUND_SCHEDULER_WORKER_QUEUES.md).
 
 ---
 
 ## 12. REGLA DE CONTINUIDAD
 1. **Rama `main` intacta** en el baseline original de Google AI Studio (`1eae2f8`).
 2. **Desarrollo activo en `Try1`** con cimientos de arquitectura Server-First.
-3. Se esperará confirmación del usuario tras la entrega de Phase 02 antes de proceder con **PHASE 03**.
+3. Se esperará confirmación del usuario tras la entrega de Phase 11 antes de proceder con **PHASE 12** (`End-to-End Automation Loop`).
+
+
+
+
 

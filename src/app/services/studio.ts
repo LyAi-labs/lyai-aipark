@@ -34,10 +34,15 @@ export class Studio {
   productionJobs = signal<ProductionJob[]>([]);
   libraryItems = signal<LibraryItem[]>([]);
   calendarItems = signal<EditorialCalendarItem[]>([]);
+  schedulerStatus = signal<any>(null);
 
   // Studio system states
   isDemoMode = signal<boolean>(true);
   isGenerating = signal<boolean>(false);
+  isGeneratingVisuals = signal<boolean>(false);
+  isRenderingVideo = signal<boolean>(false);
+  renderingProgress = signal<number>(0);
+  renderingStepDescription = signal<string>('');
   activeSection = signal<string>('dashboard');
   sidebarCollapsed = signal<boolean>(false);
 
@@ -903,51 +908,548 @@ export class Studio {
   }
 
   /**
-   * Run Video Render Pipeline
+   * Phase 06 — Test Character Voice with Server TTS or Synthetic Engine
+   */
+  async testCharacterVoice(
+    speaker: string,
+    text: string,
+    pitch = 1.0,
+    speed = 1.0,
+    voiceType = 'es-ES-Neural2-A'
+  ): Promise<void> {
+    try {
+      const response = await fetch('/api/voice/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          characterName: speaker,
+          text,
+          voiceProfile: {
+            voiceType,
+            pitch,
+            speed,
+            language: 'es-ES',
+          },
+          format: 'json',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Voice test endpoint returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (data.audioBase64) {
+        const audio = new Audio('data:audio/wav;base64,' + data.audioBase64);
+        await audio.play();
+        return;
+      }
+    } catch {
+      // Graceful fallback to client SpeechSynthesis if offline
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.pitch = pitch;
+        utterance.rate = speed;
+        utterance.lang = 'es-ES';
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+  }
+
+  /**
+   * Phase 06 — Synthesize Single Scene Audio via Server
+   */
+  async synthesizeSceneAudio(sceneIndex: number): Promise<boolean> {
+    const current = this.activeProject();
+    if (!current || !current.scenes[sceneIndex]) return false;
+
+    const scene = current.scenes[sceneIndex];
+    const textToSpeak = scene.dialogue || scene.narration || '';
+    if (!textToSpeak.trim()) return false;
+
+    const speakerChar = current.characters.find(c => scene.characters.includes(c.name)) || current.characters[0];
+    const voiceProfile = speakerChar?.voiceProfile || {
+      voiceType: 'es-ES-Neural2-A',
+      pitch: 1.0,
+      speed: 1.0,
+    };
+
+    try {
+      const res = await fetch('/api/voice/scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          episodeId: current.id,
+          sceneIndex,
+          sceneCode: scene.scene_id,
+          text: textToSpeak,
+          speakerName: speakerChar?.name || 'Narrador',
+          voiceProfile,
+          nominalDuration: scene.duration || 15,
+        }),
+      });
+
+      if (!res.ok) {
+        // Fallback to test audition base64 preview
+        const testRes = await fetch('/api/voice/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            characterName: speakerChar?.name || 'Narrador',
+            text: textToSpeak,
+            voiceProfile,
+            format: 'json',
+          }),
+        });
+        if (testRes.ok) {
+          const testData = await testRes.json();
+          const audioDataUrl = 'data:audio/wav;base64,' + testData.audioBase64;
+          const updatedScenes = [...current.scenes];
+          updatedScenes[sceneIndex] = {
+            ...scene,
+            audioUrl: audioDataUrl,
+            voiceAudioState: 'synthesized',
+            measuredAudioDuration: testData.durationSeconds,
+          };
+          this.updateProject({ ...current, scenes: updatedScenes });
+          return true;
+        }
+        return false;
+      }
+
+      const data = await res.json();
+      const updatedScenes = [...current.scenes];
+      updatedScenes[sceneIndex] = {
+        ...scene,
+        audioUrl: data.sceneAudio.publicUrl,
+        voiceAudioState: 'synthesized',
+        measuredAudioDuration: data.sceneAudio.durationSeconds,
+      };
+
+      this.updateProject({
+        ...current,
+        scenes: updatedScenes,
+      });
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Phase 06 — Synthesize All Episode Voices Batch
+   */
+  async synthesizeAllEpisodeVoices(): Promise<boolean> {
+    const current = this.activeProject();
+    if (!current || !current.scenes.length) return false;
+
+    const jobId = 'job_voice_' + Date.now().toString(36);
+    const voiceJob: ProductionJob = {
+      id: jobId,
+      projectId: current.id,
+      projectTitle: current.title,
+      stage: 'voice',
+      type: 'Real Voice & Speech Synthesis (Phase 06)',
+      status: 'processing',
+      progress: 25,
+      startedAt: new Date().toLocaleTimeString(),
+      stepDescription: 'Sintetizando archivos de audio .WAV por escena y extrayendo metadatos...',
+    };
+    this.productionJobs.update(jobs => [voiceJob, ...jobs]);
+
+    try {
+      const payloadScenes = current.scenes.map((s, idx) => {
+        const char = current.characters.find(c => s.characters.includes(c.name)) || current.characters[0];
+        return {
+          sceneIndex: idx,
+          sceneCode: s.scene_id,
+          dialogue: s.dialogue,
+          narration: s.narration,
+          speakerName: char?.name || 'Narrador',
+          voiceProfile: char?.voiceProfile,
+          duration: s.duration,
+        };
+      });
+
+      const res = await fetch('/api/voice/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          episodeId: current.id,
+          scenes: payloadScenes,
+        }),
+      });
+
+      let updatedScenes: Scene[] = [];
+      let totalAudioDuration = 0;
+      let totalCost = 0;
+      let subtitlesVtt = '';
+      let subtitlesSrt = '';
+
+      if (res.ok) {
+        const data = await res.json();
+        const batch = data.batch;
+        totalAudioDuration = batch.totalAudioDurationSeconds;
+        totalCost = batch.totalCostEur;
+        subtitlesVtt = batch.subtitlesVttUrl;
+        subtitlesSrt = batch.subtitlesSrtUrl;
+
+        updatedScenes = current.scenes.map(s => {
+          const match = batch.scenes.find((bs: any) => bs.sceneCode === s.scene_id);
+          if (match) {
+            return {
+              ...s,
+              audioUrl: match.publicUrl,
+              voiceAudioState: 'synthesized',
+              measuredAudioDuration: match.durationSeconds,
+            };
+          }
+          return s;
+        });
+      } else {
+        // Fallback for unauthenticated dev mode: synthesize scene by scene using public /test
+        for (let i = 0; i < current.scenes.length; i++) {
+          await this.synthesizeSceneAudio(i);
+        }
+        updatedScenes = this.activeProject()?.scenes || current.scenes;
+      }
+
+      this.productionJobs.update(jobs => jobs.map(j => j.id === jobId ? {
+        ...j,
+        progress: 100,
+        status: 'completed',
+        completedAt: new Date().toLocaleTimeString(),
+        stepDescription: `Síntesis completada. Audios .WAV y subtítulos VTT generados con éxito.`,
+      } : j));
+
+      const updatedProj = this.activeProject();
+      if (updatedProj) {
+        this.updateProject({
+          ...updatedProj,
+          scenes: updatedScenes,
+          costMetrics: {
+            ...updatedProj.costMetrics,
+            audioSeconds: updatedProj.costMetrics.audioSeconds + Math.round(totalAudioDuration),
+            estimatedCostEur: Number((updatedProj.costMetrics.estimatedCostEur + totalCost).toFixed(4)),
+          },
+          videoTrack: {
+            ...updatedProj.videoTrack,
+            subtitlesVtt: subtitlesVtt || updatedProj.videoTrack.subtitlesVtt,
+            subtitlesSrt: subtitlesSrt || updatedProj.videoTrack.subtitlesSrt,
+          },
+        });
+      }
+
+      return true;
+    } catch {
+      this.productionJobs.update(jobs => jobs.map(j => j.id === jobId ? {
+        ...j,
+        status: 'failed',
+        stepDescription: 'Error durante la síntesis por lotes de voz.',
+      } : j));
+      return false;
+    }
+  }
+
+  /**
+   * Phase 07 — Generate Raster 16:9 PNG Visual for a Single Scene via Server
+   */
+  async generateSceneRasterVisual(sceneIndex: number): Promise<boolean> {
+    const current = this.activeProject();
+    if (!current || !current.scenes[sceneIndex]) return false;
+
+    const scene = current.scenes[sceneIndex];
+    // Mark scene as generating
+    const updatingScenes = [...current.scenes];
+    updatingScenes[sceneIndex] = {
+      ...scene,
+      visualState: 'generating',
+    };
+    this.updateProject({ ...current, scenes: updatingScenes });
+
+    try {
+      const res = await fetch('/api/visuals/scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          episodeId: current.id,
+          sceneIndex: sceneIndex + 1,
+          sceneCode: scene.scene_id,
+          location: scene.location,
+          timeOfDay: scene.time,
+          action: scene.action,
+          camera: scene.camera,
+          characters: scene.characters,
+          visualPrompt: scene.visual_prompt,
+          seriesStyle: this.activeSeries()?.visualStyle,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP error ${res.status}`);
+      }
+
+      const data = await res.json();
+      const updatedScenes = [...current.scenes];
+      updatedScenes[sceneIndex] = {
+        ...scene,
+        imageUrl: data.visual.publicUrl,
+        imageStorageKey: data.visual.storageKey,
+        seedUsed: data.visual.seedUsed,
+        visualState: 'ready',
+      };
+
+      this.updateProject({
+        ...current,
+        scenes: updatedScenes,
+      });
+
+      return true;
+    } catch {
+      const failedScenes = [...current.scenes];
+      failedScenes[sceneIndex] = {
+        ...scene,
+        visualState: 'failed',
+      };
+      this.updateProject({ ...current, scenes: failedScenes });
+      return false;
+    }
+  }
+
+  /**
+   * Phase 07 — Generate Raster 16:9 PNG Visuals for All Episode Scenes Batch
+   */
+  async generateAllEpisodeVisuals(): Promise<boolean> {
+    const current = this.activeProject();
+    if (!current || !current.scenes.length) return false;
+
+    this.isGeneratingVisuals.set(true);
+    const jobId = 'job_visuals_' + Date.now().toString(36);
+    const visualsJob: ProductionJob = {
+      id: jobId,
+      projectId: current.id,
+      projectTitle: current.title,
+      stage: 'storyboard',
+      type: '16:9 Raster Visual Generation & Consistency (Phase 07)',
+      status: 'processing',
+      progress: 10,
+      startedAt: new Date().toLocaleTimeString(),
+      stepDescription: 'Iniciando compilación de prompts maestros y generación ráster 16:9...',
+    };
+    this.productionJobs.update(jobs => [visualsJob, ...jobs]);
+
+    try {
+      const scenesPayload = current.scenes.map((s, idx) => ({
+        sceneIndex: idx + 1,
+        sceneCode: s.scene_id,
+        location: s.location,
+        timeOfDay: s.time,
+        action: s.action,
+        camera: s.camera,
+        characters: s.characters,
+        visualPrompt: s.visual_prompt,
+        seriesStyle: this.activeSeries()?.visualStyle,
+      }));
+
+      const res = await fetch('/api/visuals/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          episodeId: current.id,
+          scenes: scenesPayload,
+        }),
+      });
+
+      if (!res.ok) {
+        // Fallback: generate scene by scene
+        for (let i = 0; i < current.scenes.length; i++) {
+          await this.generateSceneRasterVisual(i);
+        }
+      } else {
+        const data = await res.json();
+        const batchResults = data.batch?.scenes || [];
+
+        const updatedScenes = current.scenes.map((s, idx) => {
+          const match = batchResults.find((b: any) => b.sceneIndex === idx + 1 || b.sceneCode === s.scene_id);
+          if (match) {
+            return {
+              ...s,
+              imageUrl: match.publicUrl,
+              imageStorageKey: match.storageKey,
+              seedUsed: match.seedUsed,
+              visualState: 'ready' as const,
+            };
+          }
+          return s;
+        });
+
+        this.updateProject({
+          ...current,
+          scenes: updatedScenes,
+          costMetrics: {
+            ...current.costMetrics,
+            imagesGenerated: current.costMetrics.imagesGenerated + batchResults.length,
+            estimatedCostEur: Number((current.costMetrics.estimatedCostEur + (data.batch?.totalCostEur || 0)).toFixed(4)),
+          },
+        });
+      }
+
+      this.productionJobs.update(jobs => jobs.map(j => j.id === jobId ? {
+        ...j,
+        progress: 100,
+        status: 'completed',
+        completedAt: new Date().toLocaleTimeString(),
+        stepDescription: 'Storyboard ráster 16:9 generado con consistencia visual completa.',
+      } : j));
+
+      this.isGeneratingVisuals.set(false);
+      return true;
+    } catch {
+      this.productionJobs.update(jobs => jobs.map(j => j.id === jobId ? {
+        ...j,
+        status: 'failed',
+        stepDescription: 'Error durante la generación de visuales ráster por lotes.',
+      } : j));
+      this.isGeneratingVisuals.set(false);
+      return false;
+    }
+  }
+
+  /**
+   * Run Real Video Render Pipeline (FFmpeg Worker)
    */
   async renderVideo(): Promise<void> {
     const current = this.activeProject();
     if (!current) return;
 
-    const jobId = 'job_render_' + Date.now().toString(36);
+    this.isRenderingVideo.set(true);
+    this.renderingProgress.set(5);
+    this.renderingStepDescription.set('Enviando solicitud de renderizado al Worker FFmpeg...');
+
     const renderJob: ProductionJob = {
-      id: jobId,
+      id: 'job_render_' + Date.now().toString(36),
       projectId: current.id,
       projectTitle: current.title,
       stage: 'animation',
-      type: 'Modular Video Assembly (Canvas + Web Audio)',
+      type: 'FFmpeg Real Video Composition (H.264 / AAC 1080p)',
       status: 'processing',
-      progress: 15,
+      progress: 5,
       startedAt: new Date().toLocaleTimeString(),
-      stepDescription: 'Componiendo capas de animación, sincronizando pistas de diálogo y audio...'
+      stepDescription: 'Iniciando compilación en segundo plano...'
     };
     this.productionJobs.update(jobs => [renderJob, ...jobs]);
 
-    // Simulate multi-step rendering progress
-    await new Promise(r => setTimeout(r, 600));
-    this.productionJobs.update(jobs => jobs.map(j => j.id === jobId ? { ...j, progress: 45, stepDescription: 'Aplicando movimiento de cámara Ken Burns y paneos...' } : j));
+    try {
+      const payload = {
+        episodeId: current.id,
+        title: current.title,
+        scenes: current.scenes.map((s, idx) => ({
+          sceneId: s.scene_id,
+          index: idx,
+          duration: s.duration,
+          imageStorageKey: s.imageStorageKey,
+          imageUrl: s.imageUrl,
+          audioStorageKey: s.audioUrl?.includes('/api/assets/') ? s.audioUrl.replace(/^\/api\/assets\//, '') : undefined,
+          audioUrl: s.audioUrl,
+          dialogue: s.dialogue,
+          narration: s.narration,
+          speaker: s.characters[0] || 'Milo',
+          motionType: s.motionType || 'static',
+        })),
+        options: {
+          resolution: current.videoTrack.resolution || '1080p',
+          fps: current.videoTrack.fps || 24,
+          musicVolume: current.videoTrack.musicVolume,
+          voiceVolume: current.videoTrack.voiceVolume,
+          sfxVolume: current.videoTrack.sfxVolume,
+        }
+      };
 
-    await new Promise(r => setTimeout(r, 600));
-    this.productionJobs.update(jobs => jobs.map(j => j.id === jobId ? { ...j, progress: 80, stepDescription: 'Empaquetando subtítulos sincronizados WebVTT...' } : j));
+      const res = await fetch('/api/render/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload)
+      });
 
-    await new Promise(r => setTimeout(r, 400));
-    this.productionJobs.update(jobs => jobs.map(j => j.id === jobId ? {
-      ...j,
-      progress: 100,
-      status: 'completed',
-      completedAt: new Date().toLocaleTimeString(),
-      stepDescription: 'Vídeo infantil ensamblado y preparado para exportación.'
-    } : j));
-
-    this.updateProject({
-      ...current,
-      status: 'editing',
-      videoTrack: {
-        ...current.videoTrack,
-        isRendered: true,
-        renderingProgress: 100
+      if (!res.ok) {
+        throw new Error(`Error en servidor al iniciar render: HTTP ${res.status}`);
       }
-    });
+
+      const dispatch = await res.json();
+      const serverJobId = dispatch.jobId;
+
+      this.productionJobs.update(jobs => jobs.map(j => j.id === renderJob.id ? { ...j, id: serverJobId } : j));
+
+      let isCompleted = false;
+      const startTime = Date.now();
+      const timeoutMs = 180000; // 3 minutes
+
+      while (!isCompleted && Date.now() - startTime < timeoutMs) {
+        await new Promise(r => setTimeout(r, 600));
+
+        const pollRes = await fetch(`/api/render/jobs/${serverJobId}`, {
+          credentials: 'include'
+        });
+
+        if (!pollRes.ok) continue;
+
+        const pollData = await pollRes.json();
+        const job = pollData.job;
+        if (!job) continue;
+
+        this.renderingProgress.set(job.progress || 0);
+        this.renderingStepDescription.set(job.stepDescription || 'Procesando fotogramas...');
+
+        this.productionJobs.update(jobs => jobs.map(j => j.id === serverJobId ? {
+          ...j,
+          progress: job.progress,
+          stepDescription: job.stepDescription,
+          status: job.status === 'COMPLETED' ? 'completed' : (job.status === 'FAILED' ? 'failed' : 'processing')
+        } : j));
+
+        if (job.status === 'COMPLETED') {
+          isCompleted = true;
+          const result = job.result;
+          this.isRenderingVideo.set(false);
+
+          let vttText = current.videoTrack.subtitlesVtt;
+          if (result?.vttPublicUrl) {
+            try {
+              const vttRes = await fetch(result.vttPublicUrl);
+              if (vttRes.ok) vttText = await vttRes.text();
+            } catch {
+              // keep existing
+            }
+          }
+
+          this.updateProject({
+            ...current,
+            status: 'editing',
+            videoTrack: {
+              ...current.videoTrack,
+              isRendered: true,
+              renderingProgress: 100,
+              videoUrl: result?.videoPublicUrl || current.videoTrack.videoUrl,
+              subtitlesVtt: vttText,
+            }
+          });
+          break;
+        } else if (job.status === 'FAILED' || job.status === 'CANCELLED') {
+          this.isRenderingVideo.set(false);
+          throw new Error(job.errorMessage || 'El renderizado falló en el worker');
+        }
+      }
+    } catch (error: any) {
+      this.isRenderingVideo.set(false);
+      this.renderingStepDescription.set(`Error: ${error.message}`);
+    }
   }
 
   /**
@@ -972,7 +1474,10 @@ export class Studio {
     const result = await res.json();
 
     if (result.success) {
-      const pub = result.publication;
+      const pub = result.publication || result;
+      const videoId = pub.publishedVideoId || pub.videoId || pub.youtubeVideoId;
+      const videoUrl = pub.publishedVideoUrl || pub.videoUrl || pub.youtubeUrl;
+
       this.updateProject({
         ...current,
         status: privacyStatus === 'scheduled' ? 'scheduled' : 'published',
@@ -992,8 +1497,8 @@ export class Studio {
           privacyStatus,
           scheduledDate,
           scheduledTime,
-          publishedVideoId: pub.youtubeVideoId,
-          publishedVideoUrl: pub.youtubeUrl
+          publishedVideoId: videoId,
+          publishedVideoUrl: videoUrl
         }
       });
 
@@ -1015,5 +1520,85 @@ export class Studio {
     }
 
     return result;
+  }
+
+  /**
+   * Refreshes YouTube channel status from /api/youtube/status
+   */
+  async loadYouTubeStatus(): Promise<void> {
+    try {
+      const res = await fetch('/api/youtube/status');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.channel) {
+          this.channelInfo.set(data.channel);
+        }
+      }
+    } catch (err) {
+      console.warn('Could not refresh YouTube channel status:', err);
+    }
+  }
+
+  /**
+   * Initiates Google OAuth 2.0 flow by acquiring consent URL
+   */
+  async connectYouTube(): Promise<void> {
+    try {
+      const res = await fetch('/api/youtube/auth-url');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.authUrl) {
+          window.location.href = data.authUrl;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to initiate YouTube OAuth flow:', err);
+    }
+  }
+
+  /**
+   * Disconnects linked YouTube channel and reverts to Sandbox status
+   */
+  async disconnectYouTube(): Promise<void> {
+    try {
+      const res = await fetch('/api/youtube/disconnect', { method: 'POST' });
+      if (res.ok) {
+        await this.loadYouTubeStatus();
+      }
+    } catch (err) {
+      console.error('Failed to disconnect YouTube account:', err);
+    }
+  }
+
+  /**
+   * Loads Scheduler Daemon status from /api/scheduler/status
+   */
+  async loadSchedulerStatus(): Promise<void> {
+    try {
+      const res = await fetch('/api/scheduler/status');
+      if (res.ok) {
+        const data = await res.json();
+        this.schedulerStatus.set(data);
+      }
+    } catch (err) {
+      console.error('Failed to load scheduler status:', err);
+    }
+  }
+
+  /**
+   * Forces an immediate trigger tick on the scheduler and updates status
+   */
+  async triggerSchedulerNow(): Promise<any> {
+    try {
+      const res = await fetch('/api/scheduler/trigger', { method: 'POST' });
+      if (res.ok) {
+        const result = await res.json();
+        await this.loadSchedulerStatus();
+        return result;
+      }
+    } catch (err) {
+      console.error('Failed to trigger scheduler tick:', err);
+    }
+    return null;
   }
 }

@@ -29,6 +29,18 @@ import { Scene } from '../models/studio.models';
           <div class="flex items-center gap-2">
             <button
               type="button"
+              (click)="studio.generateAllEpisodeVisuals()"
+              [disabled]="studio.isGeneratingVisuals()"
+              class="flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <mat-icon class="!text-sm !w-4 !h-4" [class.animate-spin]="studio.isGeneratingVisuals()">
+                {{ studio.isGeneratingVisuals() ? 'autorenew' : 'photo_library' }}
+              </mat-icon>
+              <span>{{ studio.isGeneratingVisuals() ? 'Generando Visuales...' : 'Generar Todo el Storyboard (Ráster 16:9)' }}</span>
+            </button>
+
+            <button
+              type="button"
               (click)="goToVoice()"
               class="flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-zinc-950 hover:bg-amber-400 transition-colors shadow-sm"
             >
@@ -101,19 +113,44 @@ import { Scene } from '../models/studio.models';
 
               <!-- 16:9 Cinematic Image Container -->
               <div class="relative aspect-video w-full rounded-xl overflow-hidden border border-zinc-800 bg-zinc-950 shadow-inner group/img">
-                @if (scene.visualSvg) {
+                @if (scene.imageUrl) {
+                  <img [src]="scene.imageUrl" class="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-105" [alt]="scene.scene_id" />
+                } @else if (scene.visualSvg) {
                   <div [innerHTML]="scene.visualSvg" class="w-full h-full object-cover"></div>
                 }
 
+                <!-- Visual State Loading Overlay -->
+                @if (scene.visualState === 'generating') {
+                  <div class="absolute inset-0 bg-zinc-950/85 backdrop-blur-sm flex flex-col items-center justify-center gap-2 z-20">
+                    <mat-icon class="!text-2xl !w-6 !h-6 text-amber-400 animate-spin">autorenew</mat-icon>
+                    <span class="text-xs font-mono text-zinc-300">Generando PNG 16:9...</span>
+                  </div>
+                }
+
+                <!-- Raster vs SVG Format Badge (Top Right) -->
+                <div class="absolute top-2 right-2 z-10">
+                  @if (scene.imageUrl) {
+                    <span class="rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 text-[9px] font-mono font-bold flex items-center gap-1 shadow-sm">
+                      <mat-icon class="!text-xs !w-3 !h-3 text-emerald-400">image</mat-icon>
+                      <span>16:9 PNG RÁSTER</span>
+                    </span>
+                  } @else {
+                    <span class="rounded bg-zinc-900/80 text-zinc-400 border border-zinc-700/60 px-2 py-0.5 text-[9px] font-mono flex items-center gap-1 shadow-sm">
+                      <mat-icon class="!text-xs !w-3 !h-3 text-amber-400">auto_awesome</mat-icon>
+                      <span>SVG PREVIEW</span>
+                    </span>
+                  }
+                </div>
+
                 <!-- Image Quick Controls Overlay -->
-                <div class="absolute inset-0 bg-black/60 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2 p-4">
+                <div class="absolute inset-0 bg-black/60 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2 p-4 z-10">
                   <button
                     type="button"
-                    (click)="studio.regenerateSceneVisual(scene.id)"
+                    (click)="studio.generateSceneRasterVisual(idx)"
                     class="flex items-center gap-1.5 rounded-lg bg-zinc-900/90 px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:bg-amber-500 hover:text-zinc-950 transition-colors shadow-lg border border-zinc-700"
                   >
-                    <mat-icon class="!text-sm !w-4 !h-4">autorenew</mat-icon>
-                    <span>Regenerar Imagen</span>
+                    <mat-icon class="!text-sm !w-4 !h-4">photo_library</mat-icon>
+                    <span>Generar PNG 16:9</span>
                   </button>
                 </div>
 
